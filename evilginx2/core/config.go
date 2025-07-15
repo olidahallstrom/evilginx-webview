@@ -1,11 +1,16 @@
 package core
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kgretzky/evilginx2/log"
 
@@ -71,6 +76,14 @@ type TelegramConfig struct {
 	Enabled  bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
 }
 
+type AuthConfig struct {
+	KeyHash      string    `mapstructure:"key_hash" json:"key_hash" yaml:"key_hash"`
+	IsSetup      bool      `mapstructure:"is_setup" json:"is_setup" yaml:"is_setup"`
+	IsLocked     bool      `mapstructure:"is_locked" json:"is_locked" yaml:"is_locked"`
+	SetupTime    time.Time `mapstructure:"setup_time" json:"setup_time" yaml:"setup_time"`
+	LastAccess   time.Time `mapstructure:"last_access" json:"last_access" yaml:"last_access"`
+}
+
 type GeneralConfig struct {
 	Domain       string `mapstructure:"domain" json:"domain" yaml:"domain"`
 	OldIpv4      string `mapstructure:"ipv4" json:"ipv4" yaml:"ipv4"`
@@ -89,6 +102,7 @@ type Config struct {
 	blacklistConfig *BlacklistConfig
 	gophishConfig   *GoPhishConfig
 	telegramConfig  *TelegramConfig
+	authConfig      *AuthConfig
 	proxyConfig     *ProxyConfig
 	phishletConfig  map[string]*PhishletConfig
 	phishlets       map[string]*Phishlet
@@ -121,6 +135,7 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 		certificates:    &CertificatesConfig{},
 		gophishConfig:   &GoPhishConfig{},
 		telegramConfig:  &TelegramConfig{},
+		authConfig:      &AuthConfig{},
 		phishletConfig:  make(map[string]*PhishletConfig),
 		phishlets:       make(map[string]*Phishlet),
 		phishletNames:   []string{},
@@ -164,6 +179,8 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 	c.cfg.UnmarshalKey(CFG_GOPHISH, &c.gophishConfig)
 
 	c.cfg.UnmarshalKey(CFG_TELEGRAM, &c.telegramConfig)
+	
+	c.cfg.UnmarshalKey("auth", &c.authConfig)
 
 	if c.general.OldIpv4 != "" {
 		if c.general.ExternalIpv4 == "" {
@@ -891,6 +908,71 @@ func (c *Config) GetConfigDir() string {
 	return filepath.Dir(c.cfg.ConfigFileUsed())
 }
 
-func (c *Config) GetPhishletNames() []string {
-	return c.phishletNames
+// Authentication methods
+func (c *Config) GenerateAuthKey() string {
+	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const keyLength = 32
+	
+	key := make([]byte, keyLength)
+	for i := range key {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		key[i] = charset[n.Int64()]
+	}
+	
+	return string(key)
+}
+
+func (c *Config) HashKey(key string) string {
+	hash := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(hash[:])
+}
+
+func (c *Config) SetupAuth(key string) {
+	c.authConfig.KeyHash = c.HashKey(key)
+	c.authConfig.IsSetup = true
+	c.authConfig.IsLocked = false
+	c.authConfig.SetupTime = time.Now()
+	c.authConfig.LastAccess = time.Now()
+	
+	c.cfg.Set("auth", c.authConfig)
+	c.cfg.WriteConfig()
+	
+	log.Info("web panel authentication setup completed")
+}
+
+func (c *Config) ValidateKey(key string) bool {
+	if !c.authConfig.IsSetup {
+		return false
+	}
+	return c.HashKey(key) == c.authConfig.KeyHash
+}
+
+func (c *Config) LockPanel() {
+	c.authConfig.IsLocked = true
+	c.cfg.Set("auth", c.authConfig)
+	c.cfg.WriteConfig()
+	log.Info("web panel locked")
+}
+
+func (c *Config) UnlockPanel() {
+	c.authConfig.IsLocked = false
+	c.cfg.Set("auth", c.authConfig)
+	c.cfg.WriteConfig()
+	log.Info("web panel unlocked")
+}
+
+func (c *Config) IsAuthRequired() bool {
+	return c.authConfig.IsSetup
+}
+
+func (c *Config) IsSetup() bool {
+	return c.authConfig.IsSetup
+}
+
+func (c *Config) IsLocked() bool {
+	return c.authConfig.IsLocked
+}
+
+func (c *Config) UpdateLastAccess() {
+	c.authConfig.LastAccess = time.Now()
 }
