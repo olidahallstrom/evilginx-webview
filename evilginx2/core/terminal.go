@@ -266,15 +266,6 @@ func (t *Terminal) handleConfig(args []string) error {
 					log.Success("telegram: connection successful")
 				}
 				return nil
-			case "enabled":
-				switch args[2] {
-				case "true":
-					t.cfg.SetTelegramEnabled(true)
-					return nil
-				case "false":
-					t.cfg.SetTelegramEnabled(false)
-					return nil
-				}
 			}
 		case "turnstile":
 			switch args[1] {
@@ -329,6 +320,15 @@ func (t *Terminal) handleConfig(args []string) error {
 			case "chat_id":
 				t.cfg.SetTelegramChatId(args[2])
 				return nil
+			case "enabled":
+				switch args[2] {
+				case "true":
+					t.cfg.SetTelegramEnabled(true)
+					return nil
+				case "false":
+					t.cfg.SetTelegramEnabled(false)
+					return nil
+				}
 			}
 		}
 	}

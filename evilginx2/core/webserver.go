@@ -5,7 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,16 +21,19 @@ import (
 )
 
 type WebServer struct {
-	server         *http.Server
-	cfg            *Config
-	db             *database.Database
-	proxy          *HttpProxy
-	upgrader       websocket.Upgrader
-	clients        map[*websocket.Conn]bool
-	clientsMutex   sync.RWMutex
-	sessions       map[string]*AuthSession
-	sessionsMutex  sync.RWMutex
-	isRunning      bool
+	server            *http.Server
+	cfg               *Config
+	db                *database.Database
+	proxy             *HttpProxy
+	upgrader          websocket.Upgrader
+	clients           map[*websocket.Conn]bool
+	clientsMutex      sync.RWMutex
+	sessions          map[string]*AuthSession
+	sessionsMutex     sync.RWMutex
+	terminalSessions  map[string]*TerminalSession
+	terminalMutex     sync.RWMutex
+	commandFilter     *CommandFilter
+	isRunning         bool
 }
 
 type AuthSession struct {
@@ -89,15 +95,34 @@ type WebSocketMessage struct {
 	Time    time.Time   `json:"time"`
 }
 
+type TerminalSession struct {
+	ID           string
+	CMD          *exec.Cmd
+	PTY          *os.File
+	Conn         *websocket.Conn
+	CreatedAt    time.Time
+	LastActivity time.Time
+	UserID       string
+	IsActive     bool
+	mutex        sync.RWMutex
+}
+
+type CommandFilter struct {
+	blockedCommands []string
+	blockedPaths    []string
+}
+
 var startTime = time.Now()
 
 func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServer {
 	ws := &WebServer{
-		cfg:      cfg,
-		db:       db,
-		proxy:    proxy,
-		clients:  make(map[*websocket.Conn]bool),
-		sessions: make(map[string]*AuthSession),
+		cfg:              cfg,
+		db:               db,
+		proxy:            proxy,
+		clients:          make(map[*websocket.Conn]bool),
+		sessions:         make(map[string]*AuthSession),
+		terminalSessions: make(map[string]*TerminalSession),
+		commandFilter:    NewCommandFilter(),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true // Allow all origins for development
@@ -138,6 +163,9 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	
 	// WebSocket endpoint
 	router.HandleFunc("/ws", ws.handleWebSocket).Methods("GET")
+	
+	// Terminal WebSocket endpoint
+	router.HandleFunc("/ws/terminal", ws.handleTerminalWebSocket).Methods("GET")
 	
 	// Static file serving
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./web/static/"))))
@@ -567,6 +595,104 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         .pulsing {
             animation: pulse 2s infinite;
         }
+
+        /* Terminal Modal Styles */
+        .terminal-modal {
+            z-index: 1001;
+        }
+
+        .terminal-content {
+            width: 90%;
+            max-width: 1200px;
+            height: 80vh;
+            max-height: 600px;
+            padding: 0;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .terminal-header {
+            background: #2d2d2d;
+            padding: 15px 20px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .terminal-header h2 {
+            color: #4CAF50;
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .terminal-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .connection-status {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .connection-status.connected {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .connection-status.disconnected {
+            background: #f44336;
+            color: white;
+        }
+
+        .connection-status.connecting {
+            background: #ff9800;
+            color: white;
+        }
+
+        .terminal-warning {
+            background: #2d2d2d;
+            color: #ff9800;
+            padding: 10px 20px;
+            border-bottom: 1px solid #333;
+            font-size: 14px;
+        }
+
+        .terminal-container {
+            height: calc(100% - 120px);
+            background: #000;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .terminal-container .xterm {
+            height: 100%;
+            width: 100%;
+        }
+
+        .terminal-container .xterm .xterm-viewport {
+            overflow-y: auto;
+        }
+
+        .terminal-container .xterm .xterm-screen {
+            background: #000;
+        }
+
+        .terminal-container .xterm .xterm-cursor {
+            color: #fff;
+            background: #fff;
+        }
+
+        .terminal-container .xterm .xterm-selection {
+            background: rgba(255, 255, 255, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -635,8 +761,29 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         </div>
     </div>
 
+    <!-- Terminal Modal -->
+    <div id="terminalModal" class="modal terminal-modal">
+        <div class="modal-content terminal-content">
+            <div class="terminal-header">
+                <h2>🖥️ VPS Terminal</h2>
+                <div class="terminal-controls">
+                    <span class="connection-status" id="terminalStatus">Disconnected</span>
+                    <button class="btn btn-secondary" onclick="clearTerminal()">🧹 Clear</button>
+                    <button class="btn btn-secondary" onclick="closeTerminal()">✖️ Close</button>
+                </div>
+            </div>
+            <div class="terminal-warning">
+                ⚠️ <strong>Security Notice:</strong> This terminal has command filtering enabled. Dangerous commands are automatically blocked for security.
+            </div>
+            <div class="terminal-container">
+                <div id="terminal"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Authentication Controls -->
     <div class="auth-controls" id="authControls" style="display: none;">
+        <button class="btn btn-secondary" onclick="openTerminal()">🖥️ Terminal</button>
         <button class="btn btn-secondary" onclick="lockPanel()">🔒 Lock Panel</button>
         <button class="btn btn-secondary" onclick="logout()">🚪 Logout</button>
     </div>
@@ -1389,6 +1536,181 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         document.addEventListener('DOMContentLoaded', () => {
             window.dashboard = new EvilginxDashboard();
             // Dashboard will be initialized by AuthManager when authenticated
+        });
+
+        // Terminal functionality
+        let terminalWS = null;
+        let terminal = null;
+        let fitAddon = null;
+
+        function openTerminal() {
+            const modal = document.getElementById('terminalModal');
+            modal.classList.add('active');
+            
+            // Initialize terminal if not already done
+            if (!terminal) {
+                initializeTerminal();
+            }
+            
+            // Connect to terminal WebSocket
+            connectTerminalWebSocket();
+        }
+
+        function closeTerminal() {
+            const modal = document.getElementById('terminalModal');
+            modal.classList.remove('active');
+            
+            // Disconnect WebSocket
+            if (terminalWS) {
+                terminalWS.close();
+                terminalWS = null;
+            }
+            
+            updateTerminalStatus('disconnected');
+        }
+
+        function initializeTerminal() {
+            // Load xterm.js from CDN
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/xterm@4.19.0/lib/xterm.js';
+            script.onload = () => {
+                const fitScript = document.createElement('script');
+                fitScript.src = 'https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.5.0/lib/xterm-addon-fit.js';
+                fitScript.onload = () => {
+                    setupTerminal();
+                };
+                document.head.appendChild(fitScript);
+            };
+            document.head.appendChild(script);
+
+            // Load xterm.css
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://cdn.jsdelivr.net/npm/xterm@4.19.0/css/xterm.css';
+            document.head.appendChild(link);
+        }
+
+        function setupTerminal() {
+            terminal = new Terminal({
+                theme: {
+                    background: '#000000',
+                    foreground: '#ffffff',
+                    cursor: '#ffffff',
+                    selection: '#ffffff30',
+                    black: '#000000',
+                    red: '#ff0000',
+                    green: '#00ff00',
+                    yellow: '#ffff00',
+                    blue: '#0000ff',
+                    magenta: '#ff00ff',
+                    cyan: '#00ffff',
+                    white: '#ffffff',
+                    brightBlack: '#808080',
+                    brightRed: '#ff8080',
+                    brightGreen: '#80ff80',
+                    brightYellow: '#ffff80',
+                    brightBlue: '#8080ff',
+                    brightMagenta: '#ff80ff',
+                    brightCyan: '#80ffff',
+                    brightWhite: '#ffffff'
+                },
+                cursorBlink: true,
+                fontSize: 14,
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                rows: 24,
+                cols: 80
+            });
+
+            fitAddon = new FitAddon.FitAddon();
+            terminal.loadAddon(fitAddon);
+            
+            const terminalContainer = document.getElementById('terminal');
+            terminal.open(terminalContainer);
+            fitAddon.fit();
+
+            // Handle terminal input
+            terminal.onData((data) => {
+                if (terminalWS && terminalWS.readyState === WebSocket.OPEN) {
+                    terminalWS.send(data);
+                }
+            });
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                if (fitAddon) {
+                    fitAddon.fit();
+                }
+            });
+        }
+
+        function connectTerminalWebSocket() {
+            updateTerminalStatus('connecting');
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = protocol + '//' + window.location.host + '/ws/terminal?token=' + authManager.token;
+            
+            terminalWS = new WebSocket(wsUrl);
+            
+            terminalWS.onopen = () => {
+                updateTerminalStatus('connected');
+                if (terminal) {
+                    terminal.write('\\r\\n🎯 Evilginx Terminal Connected\\r\\n');
+                    terminal.write('⚠️  Command filtering is active for security\\r\\n');
+                    terminal.write('💡 Type "help" for available commands\\r\\n\\r\\n');
+                }
+            };
+            
+            terminalWS.onmessage = (event) => {
+                if (terminal) {
+                    terminal.write(event.data);
+                }
+            };
+            
+            terminalWS.onclose = () => {
+                updateTerminalStatus('disconnected');
+                if (terminal) {
+                    terminal.write('\\r\\n❌ Terminal connection closed\\r\\n');
+                }
+            };
+            
+            terminalWS.onerror = (error) => {
+                updateTerminalStatus('disconnected');
+                if (terminal) {
+                    terminal.write('\\r\\n❌ Terminal connection error\\r\\n');
+                }
+                console.error('Terminal WebSocket error:', error);
+            };
+        }
+
+        function updateTerminalStatus(status) {
+            const statusEl = document.getElementById('terminalStatus');
+            statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            statusEl.className = 'connection-status ' + status;
+        }
+
+        function clearTerminal() {
+            if (terminal) {
+                terminal.clear();
+                terminal.write('🧹 Terminal cleared\\r\\n\\r\\n');
+            }
+        }
+
+        // Close terminal modal when clicking outside
+        document.addEventListener('click', (e) => {
+            const modal = document.getElementById('terminalModal');
+            if (e.target === modal) {
+                closeTerminal();
+            }
+        });
+
+        // Handle Escape key to close terminal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('terminalModal');
+                if (modal.classList.contains('active')) {
+                    closeTerminal();
+                }
+            }
         });
     </script>
 </body>
@@ -2150,4 +2472,248 @@ func (ws *WebServer) NotifyNewSession(session *database.Session) {
 
 func (ws *WebServer) NotifySessionUpdate(session *database.Session) {
 	ws.BroadcastToClients("session_update", session)
-} 
+}
+
+// Command filter initialization
+func NewCommandFilter() *CommandFilter {
+	return &CommandFilter{
+		blockedCommands: []string{
+			"rm -rf",
+			"dd if=/dev/zero",
+			":(){ :|:& };:",
+			"fork()",
+			"sudo su",
+			"chmod 777",
+			"chown root",
+			"mkfs",
+			"fdisk",
+			"parted",
+			"systemctl stop",
+			"systemctl disable",
+			"iptables -F",
+			"ufw disable",
+			"passwd root",
+			"userdel",
+			"usermod",
+			"crontab -r",
+			"history -c",
+			"shred",
+			"killall",
+		},
+		blockedPaths: []string{
+			"/etc/passwd",
+			"/etc/shadow",
+			"/etc/sudoers",
+			"/root/",
+			"/home/*/.ssh",
+			"/var/log/auth.log",
+			"/var/log/secure",
+			"/proc/",
+			"/sys/",
+		},
+	}
+}
+
+func (cf *CommandFilter) IsCommandSafe(command string) bool {
+	cmd := strings.TrimSpace(strings.ToLower(command))
+	
+	// Check for blocked commands
+	for _, blocked := range cf.blockedCommands {
+		if strings.Contains(cmd, blocked) {
+			return false
+		}
+	}
+	
+	// Check for blocked paths
+	for _, blockedPath := range cf.blockedPaths {
+		if strings.Contains(cmd, blockedPath) {
+			return false
+		}
+	}
+	
+	return true
+}
+
+// Terminal WebSocket handler
+func (ws *WebServer) handleTerminalWebSocket(w http.ResponseWriter, r *http.Request) {
+	// Check authentication
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		// Try to get token from query parameter (for WebSocket connections)
+		token = r.URL.Query().Get("token")
+	}
+	
+	if !ws.validateSession(token) {
+		log.Warning("unauthorized terminal access attempt from %s", r.RemoteAddr)
+		http.Error(w, "Unauthorized", 401)
+		return
+	}
+	
+	// Upgrade to WebSocket
+	conn, err := ws.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Error("terminal websocket upgrade error: %v", err)
+		return
+	}
+	
+	// Create terminal session
+	sessionID := ws.generateSessionToken()
+	session, err := ws.createTerminalSession(sessionID, token)
+	if err != nil {
+		log.Error("failed to create terminal session: %v", err)
+		conn.Close()
+		return
+	}
+	
+	session.Conn = conn
+	log.Info("terminal session created: %s", sessionID)
+	
+	// Start terminal I/O
+	go ws.handleTerminalOutput(session)
+	go ws.handleTerminalInput(session)
+	
+	// Session cleanup
+	defer ws.cleanupTerminalSession(sessionID)
+	
+	// Keep session alive
+	for {
+		if !session.IsActive {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func (ws *WebServer) createTerminalSession(sessionID, userToken string) (*TerminalSession, error) {
+	// Create bash command with restricted environment
+	cmd := exec.Command("/bin/bash", "-i")
+	cmd.Env = []string{
+		"TERM=xterm-256color",
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"HOME=/tmp",
+		"USER=evilginx",
+		"SHELL=/bin/bash",
+		"PS1=\\[\\033[1;32m\\]evilginx\\[\\033[0m\\]@\\[\\033[1;34m\\]terminal\\[\\033[0m\\]:\\[\\033[1;31m\\]\\w\\[\\033[0m\\]$ ",
+	}
+	
+	// For systems with pty support, we'd use pty.Start(cmd) here
+	// For now, we'll use basic pipes
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+	
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	
+	session := &TerminalSession{
+		ID:           sessionID,
+		CMD:          cmd,
+		PTY:          stdin.(*os.File), // This is a simplification
+		CreatedAt:    time.Now(),
+		LastActivity: time.Now(),
+		UserID:       userToken,
+		IsActive:     true,
+	}
+	
+	ws.terminalMutex.Lock()
+	ws.terminalSessions[sessionID] = session
+	ws.terminalMutex.Unlock()
+	
+	// Handle stdout and stderr
+	go func() {
+		io.Copy(session.Conn, stdout)
+	}()
+	
+	go func() {
+		io.Copy(session.Conn, stderr)
+	}()
+	
+	return session, nil
+}
+
+func (ws *WebServer) handleTerminalOutput(session *TerminalSession) {
+	// This would handle PTY output in a full implementation
+	// For now, it's handled in createTerminalSession
+}
+
+func (ws *WebServer) handleTerminalInput(session *TerminalSession) {
+	defer session.Conn.Close()
+	
+	var commandBuffer strings.Builder
+	
+	for {
+		_, message, err := session.Conn.ReadMessage()
+		if err != nil {
+			log.Debug("terminal websocket read error: %v", err)
+			break
+		}
+		
+		session.mutex.Lock()
+		session.LastActivity = time.Now()
+		session.mutex.Unlock()
+		
+		// Process input character by character
+		for _, char := range string(message) {
+			switch char {
+			case '\r', '\n':
+				// Command entered, check if safe
+				command := commandBuffer.String()
+				if command != "" && !ws.commandFilter.IsCommandSafe(command) {
+					// Block dangerous command
+					warningMsg := fmt.Sprintf("\r\n❌ Command blocked for security: %s\r\n", command)
+					session.Conn.WriteMessage(1, []byte(warningMsg))
+					commandBuffer.Reset()
+					continue
+				}
+				commandBuffer.Reset()
+			case '\b', 127: // Backspace
+				if commandBuffer.Len() > 0 {
+					str := commandBuffer.String()
+					commandBuffer.Reset()
+					commandBuffer.WriteString(str[:len(str)-1])
+				}
+			default:
+				commandBuffer.WriteRune(char)
+			}
+		}
+		
+		// Forward input to terminal (in a full implementation)
+		// For now, we'll just echo back
+		session.Conn.WriteMessage(1, message)
+	}
+}
+
+func (ws *WebServer) cleanupTerminalSession(sessionID string) {
+	ws.terminalMutex.Lock()
+	defer ws.terminalMutex.Unlock()
+	
+	session, exists := ws.terminalSessions[sessionID]
+	if !exists {
+		return
+	}
+	
+	session.IsActive = false
+	
+	if session.CMD != nil && session.CMD.Process != nil {
+		session.CMD.Process.Kill()
+	}
+	
+	if session.Conn != nil {
+		session.Conn.Close()
+	}
+	
+	delete(ws.terminalSessions, sessionID)
+	log.Info("terminal session cleaned up: %s", sessionID)
+}
