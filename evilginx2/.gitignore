@@ -3,3 +3,5 @@ build/
 private/
 /phishlets
 !/phishlets/example.yaml
+!/phishlets/demo-*.yaml
+!/phishlets/README.md
