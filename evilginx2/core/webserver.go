@@ -291,6 +291,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             text-decoration: none;
             white-space: nowrap;
             user-select: none;
+            background: none;
         }
 
         .btn:focus {
@@ -397,6 +398,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             text-align: center;
             box-shadow: var(--shadow-lg);
             animation: slideUp 0.3s ease-out;
+            max-height: 80vh;
+            overflow-y: auto;
         }
 
         @keyframes slideUp {
@@ -458,6 +461,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             justify-content: space-between;
             align-items: center;
             word-break: break-all;
+            gap: 12px;
         }
 
         .key-warning {
@@ -661,6 +665,15 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             height: 20px;
             background: var(--accent-primary);
             border-radius: 2px;
+        }
+
+        .section-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         /* Enhanced Table */
@@ -945,6 +958,45 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             background: rgba(47, 129, 247, 0.3);
         }
 
+        /* Toast Notifications */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 12px 20px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-primary);
+            box-shadow: var(--shadow-lg);
+            z-index: 2000;
+            animation: slideUpToast 0.3s ease-out;
+            max-width: 400px;
+            word-wrap: break-word;
+        }
+
+        .toast.success {
+            border-color: var(--accent-secondary);
+            background: rgba(35, 134, 54, 0.1);
+        }
+
+        .toast.error {
+            border-color: var(--accent-danger);
+            background: rgba(218, 54, 51, 0.1);
+        }
+
+        @keyframes slideUpToast {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
         /* Responsive Design */
         @media (max-width: 768px) {
             .container {
@@ -983,6 +1035,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 right: unset;
                 margin-bottom: 16px;
                 justify-content: center;
+                flex-wrap: wrap;
             }
 
             .connection-status {
@@ -1000,6 +1053,52 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             .sessions-table th,
             .sessions-table td {
                 padding: 8px 12px;
+            }
+
+            .section-controls {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 12px;
+            }
+
+            .terminal-content {
+                width: 95%;
+                height: 90vh;
+            }
+
+            .modal-content {
+                width: 95%;
+                max-width: unset;
+                padding: 24px 20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 12px;
+            }
+
+            .sessions-table {
+                font-size: 11px;
+            }
+
+            .sessions-table th,
+            .sessions-table td {
+                padding: 6px 8px;
+            }
+
+            .phishlet-card {
+                padding: 16px;
+            }
+
+            .btn {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+
+            .btn-lg {
+                padding: 10px 20px;
+                font-size: 14px;
             }
         }
 
@@ -1065,7 +1164,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 <div class="step" data-step="3">
                     <h3>✅ Setup Complete</h3>
                     <p>Your web panel is now secured with authentication!</p>
-                    <p>You can now access the dashboard and use the lock/unlock feature.</p>
+                    <p>You can now access the dashboard and use the lock feature.</p>
                     <button class="btn btn-success btn-lg" onclick="finishSetup()">Continue to Dashboard</button>
                 </div>
             </div>
@@ -1102,6 +1201,29 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         </div>
     </div>
 
+    <!-- Generic Modal for Messages -->
+    <div id="messageModal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Message</h2>
+            <p id="modalMessage">This is a message.</p>
+            <div id="modalButtons">
+                <button class="btn btn-primary" onclick="closeModal('messageModal')">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <h2 id="confirmTitle">Confirm Action</h2>
+            <p id="confirmMessage">Are you sure?</p>
+            <div id="confirmButtons" style="display: flex; gap: 12px; justify-content: center;">
+                <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Cancel</button>
+                <button class="btn btn-danger" id="confirmAction">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Terminal Modal -->
     <div id="terminalModal" class="modal terminal-modal">
         <div class="modal-content terminal-content">
@@ -1126,7 +1248,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     <div class="auth-controls" id="authControls" style="display: none;">
         <button class="btn btn-secondary btn-sm" onclick="openTerminal()">🖥️ Terminal</button>
         <button class="btn btn-secondary btn-sm" onclick="lockPanel()">🔒 Lock Panel</button>
-        <button class="btn btn-danger btn-sm" onclick="logout()">🚪 Logout</button>
     </div>
 
     <div class="container">
@@ -1182,6 +1303,84 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     </div>
 
     <script>
+        // Utility Functions for Modern UI
+        function showToast(message, type = 'info') {
+            // Remove existing toasts
+            const existingToasts = document.querySelectorAll('.toast');
+            existingToasts.forEach(toast => toast.remove());
+            
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (type ? ' ' + type : '');
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 4000);
+        }
+
+        function showModal(title, message, buttons = [{ text: 'OK', class: 'btn-primary' }]) {
+            const modal = document.getElementById('messageModal');
+            const titleEl = document.getElementById('modalTitle');
+            const messageEl = document.getElementById('modalMessage');
+            const buttonsEl = document.getElementById('modalButtons');
+            
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            
+            buttonsEl.innerHTML = '';
+            buttons.forEach(button => {
+                const btn = document.createElement('button');
+                btn.className = 'btn ' + (button.class || 'btn-secondary');
+                btn.textContent = button.text;
+                btn.onclick = button.onclick || function() { closeModal('messageModal'); };
+                buttonsEl.appendChild(btn);
+            });
+            
+            modal.classList.add('active');
+        }
+
+        function showConfirm(title, message, onConfirm, confirmText = 'Confirm') {
+            const modal = document.getElementById('confirmModal');
+            const titleEl = document.getElementById('confirmTitle');
+            const messageEl = document.getElementById('confirmMessage');
+            const actionBtn = document.getElementById('confirmAction');
+            
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+            actionBtn.textContent = confirmText;
+            actionBtn.onclick = function() {
+                closeModal('confirmModal');
+                if (onConfirm) onConfirm();
+            };
+            
+            modal.classList.add('active');
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        function downloadText(filename, content) {
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }
+
+        function downloadJSON(filename, data) {
+            const content = JSON.stringify(data, null, 2);
+            downloadText(filename, content);
+        }
+
         // Authentication System
         class AuthManager {
             constructor() {
@@ -1271,19 +1470,24 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 }
             }
 
-            async logout() {
+            async lockPanel() {
                 try {
-                    await fetch('/api/auth/logout', {
+                    const response = await fetch('/api/auth/lock', {
                         method: 'POST',
                         headers: { 'Authorization': this.token }
                     });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.token = null;
+                        localStorage.removeItem('authToken');
+                        this.checkAuthStatus();
+                        showToast('Panel locked successfully', 'success');
+                    }
                 } catch (error) {
-                    console.error('Logout failed:', error);
+                    console.error('Lock failed:', error);
+                    showToast('Failed to lock panel', 'error');
                 }
-                
-                this.token = null;
-                localStorage.removeItem('authToken');
-                this.checkAuthStatus();
             }
 
             async lockPanel() {
@@ -1334,10 +1538,15 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                         document.getElementById('generatedKey').textContent = data.key;
                         this.showStep(2);
                     } else {
-                        alert('Setup failed: ' + data.message);
+                        showModal('Setup Failed', data.message, [
+                            { text: 'Try Again', class: 'btn-primary', onclick: () => { closeModal('messageModal'); this.setupAuth(); } },
+                            { text: 'Cancel', class: 'btn-secondary', onclick: () => closeModal('messageModal') }
+                        ]);
                     }
                 } catch (error) {
-                    alert('Setup failed. Please try again.');
+                    showModal('Setup Failed', 'Setup failed. Please try again.', [
+                        { text: 'Retry', class: 'btn-primary', onclick: () => { closeModal('messageModal'); this.setupAuth(); } }
+                    ]);
                 }
             }
 
@@ -1346,11 +1555,18 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 document.querySelector('[data-step="' + step + '"]').classList.add('active');
             }
 
-            copyKey() {
+            copySecurityKey() {
                 const key = document.getElementById('generatedKey').textContent;
-                navigator.clipboard.writeText(key).then(() => {
-                    alert('Key copied to clipboard!');
-                });
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(key).then(() => {
+                        showToast('Security key copied to clipboard!', 'success');
+                    }).catch(err => {
+                        console.error('Failed to copy to clipboard:', err);
+                        showModal('Security Key', 'Copy this key manually:\n\n' + key);
+                    });
+                } else {
+                    showModal('Security Key', 'Copy this key manually:\n\n' + key);
+                }
             }
         }
 
@@ -1370,19 +1586,16 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         }
 
         function copyKey() {
-            authManager.copyKey();
+            authManager.copySecurityKey();
         }
 
         function lockPanel() {
-            if (confirm('Are you sure you want to lock the panel?')) {
-                authManager.lockPanel();
-            }
-        }
-
-        function logout() {
-            if (confirm('Are you sure you want to logout?')) {
-                authManager.logout();
-            }
+            showConfirm(
+                'Lock Panel',
+                'Are you sure you want to lock the panel? You will need to enter your security key to unlock it.',
+                () => authManager.lockPanel(),
+                'Lock Panel'
+            );
         }
 
         // Form handlers
@@ -1518,11 +1731,25 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 const contentEl = document.getElementById('sessions-content');
                 
                 if (!sessions || sessions.length === 0) {
-                    contentEl.innerHTML = '<p style="text-align: center; color: #888; padding: 50px;">No sessions found</p>';
+                    contentEl.innerHTML = '<div class="section-controls">' +
+                        '<div style="display: flex; gap: 12px;">' +
+                            '<button class="btn btn-danger btn-sm" onclick="clearAllSessions()" disabled>🗑️ Clear All Sessions</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<p style="text-align: center; color: #888; padding: 50px;">No sessions found</p>';
                     return;
                 }
 
-                let tableHTML = '<table class="sessions-table">' +
+                // Session controls
+                let controlsHTML = '<div class="section-controls">' +
+                    '<div style="display: flex; gap: 12px; flex-wrap: wrap;">' +
+                        '<button class="btn btn-success btn-sm" onclick="downloadAllSessions()">📥 Download All Sessions</button>' +
+                        '<button class="btn btn-danger btn-sm" onclick="clearAllSessions()">🗑️ Clear All Sessions</button>' +
+                        '<span style="color: var(--text-secondary); font-size: 13px; align-self: center;">' + sessions.length + ' total session(s)</span>' +
+                    '</div>' +
+                '</div>';
+
+                let tableHTML = controlsHTML + '<table class="sessions-table">' +
                     '<thead>' +
                         '<tr>' +
                             '<th>ID</th>' +
@@ -1537,12 +1764,26 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     '</thead>' +
                     '<tbody>';
 
-                sessions.forEach(session => {
+                sessions.forEach((session, index) => {
+                    const hasCredentials = session.username && session.password;
+                    const hasTokens = session.tokens && Object.keys(session.tokens).length > 0;
+                    const hasData = hasCredentials || hasTokens;
+                    
+                    // Password field with toggle
+                    let passwordField = '-';
+                    if (session.password) {
+                        const passwordId = 'pwd-' + session.id;
+                        passwordField = '<div style="display: flex; align-items: center; gap: 6px;">' +
+                            '<span id="' + passwordId + '" style="font-family: monospace;">••••••••</span>' +
+                            '<button class="btn btn-sm" style="padding: 2px 6px; font-size: 11px;" onclick="togglePassword(\'' + passwordId + '\', \'' + session.password + '\')" title="Toggle password visibility">👁</button>' +
+                        '</div>';
+                    }
+                    
                     tableHTML += '<tr>' +
                         '<td>' + session.id + '</td>' +
                         '<td><strong>' + session.phishlet + '</strong></td>' +
                         '<td>' + (session.username || '-') + '</td>' +
-                        '<td>' + (session.password ? '••••••••' : '-') + '</td>' +
+                        '<td>' + passwordField + '</td>' +
                         '<td>' +
                             '<span class="status-badge ' + this.getSessionStatus(session) + '">' +
                                 this.getSessionStatusText(session) +
@@ -1550,11 +1791,14 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                         '</td>' +
                         '<td>' + session.remote_addr + '</td>' +
                         '<td>' + new Date(session.update_time * 1000).toLocaleString() + '</td>' +
-                        '<td>' +
-                            (session.username && session.password ? 
-                                '<button class="btn btn-secondary" onclick="copySessionCredentials(\'' + session.username + '\', \'' + session.password + '\')">Copy</button>' : 
-                                '-'
-                            ) +
+                        '<td style="white-space: nowrap;">' +
+                            '<div style="display: flex; gap: 4px;">' +
+                                (hasData ? 
+                                    '<button class="btn btn-success btn-sm" onclick="downloadSession(' + index + ')" title="Download session data">📥</button>' : 
+                                    '<button class="btn btn-secondary btn-sm" disabled title="No data to download">📥</button>'
+                                ) +
+                                '<button class="btn btn-danger btn-sm" onclick="deleteSession(' + index + ')" title="Delete session">🗑️</button>' +
+                            '</div>' +
                         '</td>' +
                     '</tr>';
                 });
@@ -1562,6 +1806,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 tableHTML += '</tbody></table>';
 
                 contentEl.innerHTML = tableHTML;
+                // Store sessions data for download functionality
+                window.sessionsData = sessions;
             }
 
             updatePhishlets(phishlets) {
@@ -1680,18 +1926,22 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     });
                     const data = await response.json();
                     if (data.success) {
-                        navigator.clipboard.writeText(data.credentials).then(() => {
-                            alert('Credentials copied to clipboard!');
-                        }).catch(err => {
-                            console.error('Failed to copy credentials to clipboard:', err);
-                            alert('Credentials copied! (manual copy required)');
-                        });
+                        if (navigator.clipboard && window.isSecureContext) {
+                            navigator.clipboard.writeText(data.credentials).then(() => {
+                                showToast('Credentials copied to clipboard!', 'success');
+                            }).catch(err => {
+                                console.error('Failed to copy credentials to clipboard:', err);
+                                showModal('Credentials', data.credentials);
+                            });
+                        } else {
+                            showModal('Credentials', data.credentials);
+                        }
                     } else {
-                        alert('Failed to get credentials: ' + data.message);
+                        showModal('Error', 'Failed to get credentials: ' + data.message);
                     }
                 } catch (error) {
                     console.error('Error copying credentials:', error);
-                    alert('Failed to copy credentials. Please try again.');
+                    showModal('Error', 'Failed to copy credentials. Please try again.');
                 }
             }
 
@@ -1704,21 +1954,35 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     });
                     const data = await response.json();
                     if (data.success) {
-                        alert('Phishlet ' + phishletName + ' ' + (isEnabled ? 'disabled' : 'enabled') + ' successfully!');
+                        showToast('Phishlet ' + phishletName + ' ' + (isEnabled ? 'disabled' : 'enabled') + ' successfully!', 'success');
                         this.loadInitialData(); // Refresh the phishlets list
                     } else {
-                        alert('Failed to update phishlet: ' + data.message);
+                        showModal('Error', 'Failed to update phishlet: ' + data.message);
                     }
                 } catch (error) {
                     console.error('Error updating phishlet:', error);
-                    alert('Failed to update phishlet. Please try again.');
+                    showModal('Error', 'Failed to update phishlet. Please try again.');
                 }
             }
 
             async setPhishletHostname(phishletName) {
-                const hostname = prompt('Set hostname for ' + phishletName + ':', '');
-                if (hostname === null) return; // User cancelled
-                
+                showModal('Set Hostname', 'Set hostname for ' + phishletName + ':', [
+                    {
+                        text: 'Set Hostname',
+                        class: 'btn-primary',
+                        onclick: () => {
+                            closeModal('messageModal');
+                            const hostname = prompt('Enter hostname:', '');
+                            if (hostname !== null) {
+                                this.doSetPhishletHostname(phishletName, hostname);
+                            }
+                        }
+                    },
+                    { text: 'Cancel', class: 'btn-secondary' }
+                ]);
+            }
+
+            async doSetPhishletHostname(phishletName, hostname) {
                 try {
                     const response = await fetch('/api/phishlets/' + phishletName + '/hostname', {
                         method: 'POST',
@@ -1730,14 +1994,14 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     });
                     const data = await response.json();
                     if (data.success) {
-                        alert('Hostname set for ' + phishletName + '!');
+                        showToast('Hostname set for ' + phishletName + '!', 'success');
                         this.loadInitialData(); // Refresh the phishlets list
                     } else {
-                        alert('Failed to set hostname: ' + data.message);
+                        showModal('Error', 'Failed to set hostname: ' + data.message);
                     }
                 } catch (error) {
                     console.error('Error setting hostname:', error);
-                    alert('Failed to set hostname. Please try again.');
+                    showModal('Error', 'Failed to set hostname. Please try again.');
                 }
             }
         }
@@ -1761,22 +2025,162 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
         }
 
-        // Global function for copying session credentials
-        function copySessionCredentials(username, password) {
-            const credentials = 'Username: ' + username + '\nPassword: ' + password;
-            navigator.clipboard.writeText(credentials).then(() => {
-                alert('Session credentials copied to clipboard!');
-            }).catch(err => {
-                alert('Credentials:\n\n' + credentials);
-            });
+        // Password toggle functionality
+        function togglePassword(passwordId, actualPassword) {
+            const passwordElement = document.getElementById(passwordId);
+            const toggleButton = passwordElement.nextElementSibling;
+            
+            if (passwordElement.textContent === '••••••••') {
+                passwordElement.textContent = actualPassword;
+                toggleButton.textContent = '🙈';
+                toggleButton.title = 'Hide password';
+            } else {
+                passwordElement.textContent = '••••••••';
+                toggleButton.textContent = '👁';
+                toggleButton.title = 'Show password';
+            }
+        }
+
+        // Global functions for session management
+        function downloadSession(sessionIndex) {
+            if (!window.sessionsData || !window.sessionsData[sessionIndex]) {
+                showModal('Error', 'Session data not available');
+                return;
+            }
+            
+            const session = window.sessionsData[sessionIndex];
+            const timestamp = new Date().toISOString().split('T')[0];
+            const filename = 'evilginx-session-' + session.id + '-' + timestamp + '.json';
+            
+            const sessionData = {
+                id: session.id,
+                phishlet: session.phishlet,
+                username: session.username,
+                password: session.password,
+                tokens: session.tokens || {},
+                cookies: session.cookies || {},
+                remote_addr: session.remote_addr,
+                user_agent: session.user_agent,
+                create_time: session.create_time,
+                update_time: session.update_time,
+                exported_at: new Date().toISOString()
+            };
+            
+            downloadJSON(filename, sessionData);
+            showToast('Session data downloaded successfully!', 'success');
+        }
+
+        function downloadAllSessions() {
+            if (!window.sessionsData || window.sessionsData.length === 0) {
+                showModal('Error', 'No sessions available to download');
+                return;
+            }
+            
+            const timestamp = new Date().toISOString().split('T')[0];
+            const filename = 'evilginx-all-sessions-' + timestamp + '.json';
+            
+            const allSessionsData = {
+                exported_at: new Date().toISOString(),
+                total_sessions: window.sessionsData.length,
+                sessions: window.sessionsData.map(session => ({
+                    id: session.id,
+                    phishlet: session.phishlet,
+                    username: session.username,
+                    password: session.password,
+                    tokens: session.tokens || {},
+                    cookies: session.cookies || {},
+                    remote_addr: session.remote_addr,
+                    user_agent: session.user_agent,
+                    create_time: session.create_time,
+                    update_time: session.update_time
+                }))
+            };
+            
+            downloadJSON(filename, allSessionsData);
+            showToast('All sessions downloaded successfully!', 'success');
+        }
+
+        async function deleteSession(sessionIndex) {
+            if (!window.sessionsData || !window.sessionsData[sessionIndex]) {
+                showModal('Error', 'Session not found');
+                return;
+            }
+            
+            const session = window.sessionsData[sessionIndex];
+            showConfirm(
+                'Delete Session',
+                'Are you sure you want to delete session #' + session.id + '? This action cannot be undone.',
+                async () => {
+                    try {
+                        const response = await fetch('/api/sessions/' + session.id, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': authManager.token }
+                        });
+                        
+                        if (response.ok) {
+                            showToast('Session deleted successfully!', 'success');
+                            window.dashboard.loadInitialData();
+                        } else {
+                            const data = await response.json();
+                            showModal('Error', 'Failed to delete session: ' + (data.message || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Error deleting session:', error);
+                        showModal('Error', 'Failed to delete session. Please try again.');
+                    }
+                },
+                'Delete Session'
+            );
+        }
+
+        async function clearAllSessions() {
+            if (!window.sessionsData || window.sessionsData.length === 0) {
+                showModal('No Sessions', 'No sessions to clear');
+                return;
+            }
+            
+            showConfirm(
+                'Clear All Sessions',
+                'Are you sure you want to delete ALL ' + window.sessionsData.length + ' sessions? This action cannot be undone and will permanently remove all captured data.',
+                async () => {
+                    try {
+                        const response = await fetch('/api/sessions', {
+                            method: 'DELETE',
+                            headers: { 'Authorization': authManager.token }
+                        });
+                        
+                        if (response.ok) {
+                            showToast('All sessions cleared successfully!', 'success');
+                            window.dashboard.loadInitialData();
+                        } else {
+                            const data = await response.json();
+                            showModal('Error', 'Failed to clear sessions: ' + (data.message || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Error clearing sessions:', error);
+                        showModal('Error', 'Failed to clear sessions. Please try again.');
+                    }
+                },
+                'Clear All Sessions'
+            );
         }
 
         // Global functions for lure management
         function showCreateLureModal() {
-            const phishlet = prompt('Enter phishlet name:');
-            if (phishlet) {
-                createLure(phishlet);
-            }
+            showModal('Create New Lure', 'Enter the phishlet name for the new lure:', [
+                {
+                    text: 'Create Lure',
+                    class: 'btn-primary',
+                    onclick: () => {
+                        closeModal('messageModal');
+                        const phishlet = prompt('Enter phishlet name:');
+                        if (phishlet) {
+                            createLure(phishlet);
+                        }
+                    }
+                },
+                { text: 'Cancel', class: 'btn-secondary' }
+            ]);
         }
 
         async function createLure(phishletName) {
@@ -1791,14 +2195,14 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 });
                 const data = await response.json();
                 if (response.ok) {
-                    alert('Lure created successfully!');
+                    showToast('Lure created successfully!', 'success');
                     window.dashboard.loadInitialData();
                 } else {
-                    alert('Failed to create lure: ' + (data.message || 'Unknown error'));
+                    showModal('Error', 'Failed to create lure: ' + (data.message || 'Unknown error'));
                 }
             } catch (error) {
                 console.error('Error creating lure:', error);
-                alert('Failed to create lure. Please try again.');
+                showModal('Error', 'Failed to create lure. Please try again.');
             }
         }
 
@@ -1809,27 +2213,50 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 });
                 const data = await response.json();
                 if (response.ok) {
-                    navigator.clipboard.writeText(data.url).then(() => {
-                        alert('Lure URL copied to clipboard!\\n\\n' + data.url);
-                    }).catch(err => {
-                        alert('Lure URL:\\n\\n' + data.url);
-                    });
+                    const url = data.url;
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(url).then(() => {
+                            showToast('Lure URL copied to clipboard!', 'success');
+                        }).catch(err => {
+                            console.error('Failed to copy to clipboard:', err);
+                            showModal('Lure URL', 'Copy this URL manually:\n\n' + url);
+                        });
+                    } else {
+                        showModal('Lure URL', 'Copy this URL manually:\n\n' + url);
+                    }
                 } else {
-                    alert('Failed to get lure URL: ' + (data.message || 'Unknown error'));
+                    showModal('Error', 'Failed to get lure URL: ' + (data.message || 'Unknown error'));
                 }
             } catch (error) {
                 console.error('Error getting lure URL:', error);
-                alert('Failed to get lure URL. Please try again.');
+                showModal('Error', 'Failed to get lure URL. Please try again.');
             }
         }
 
         async function editLure(lureId) {
-            const hostname = prompt('Enter new hostname (leave empty for default):');
-            const redirectUrl = prompt('Enter redirect URL (leave empty for none):');
-            
+            showModal('Edit Lure', 'Modify the lure settings:', [
+                {
+                    text: 'Edit Settings',
+                    class: 'btn-primary',
+                    onclick: () => {
+                        closeModal('messageModal');
+                        const hostname = prompt('Enter new hostname (leave empty for default):');
+                        if (hostname !== null) {
+                            const redirectUrl = prompt('Enter redirect URL (leave empty for none):');
+                            if (redirectUrl !== null) {
+                                doEditLure(lureId, hostname, redirectUrl);
+                            }
+                        }
+                    }
+                },
+                { text: 'Cancel', class: 'btn-secondary' }
+            ]);
+        }
+
+        async function doEditLure(lureId, hostname, redirectUrl) {
             try {
-                            const response = await fetch('/api/lures/' + lureId, {
-                method: 'PUT',
+                const response = await fetch('/api/lures/' + lureId, {
+                    method: 'PUT',
                     headers: { 
                         'Authorization': authManager.token,
                         'Content-Type': 'application/json'
@@ -1841,35 +2268,41 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 });
                 const data = await response.json();
                 if (response.ok) {
-                    alert('Lure updated successfully!');
+                    showToast('Lure updated successfully!', 'success');
                     window.dashboard.loadInitialData();
                 } else {
-                    alert('Failed to update lure: ' + (data.message || 'Unknown error'));
+                    showModal('Error', 'Failed to update lure: ' + (data.message || 'Unknown error'));
                 }
             } catch (error) {
                 console.error('Error updating lure:', error);
-                alert('Failed to update lure. Please try again.');
+                showModal('Error', 'Failed to update lure. Please try again.');
             }
         }
 
         async function deleteLure(lureId) {
-            if (confirm('Are you sure you want to delete this lure?')) {
-                try {
-                                    const response = await fetch('/api/lures/' + lureId, {
-                    method: 'DELETE',
-                        headers: { 'Authorization': authManager.token }
-                    });
-                    if (response.ok) {
-                        alert('Lure deleted successfully!');
-                        window.dashboard.loadInitialData();
-                    } else {
-                        alert('Failed to delete lure');
+            showConfirm(
+                'Delete Lure',
+                'Are you sure you want to delete this lure? This action cannot be undone.',
+                async () => {
+                    try {
+                        const response = await fetch('/api/lures/' + lureId, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': authManager.token }
+                        });
+                        if (response.ok) {
+                            showToast('Lure deleted successfully!', 'success');
+                            window.dashboard.loadInitialData();
+                        } else {
+                            const data = await response.json();
+                            showModal('Error', 'Failed to delete lure: ' + (data.message || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Error deleting lure:', error);
+                        showModal('Error', 'Failed to delete lure. Please try again.');
                     }
-                } catch (error) {
-                    console.error('Error deleting lure:', error);
-                    alert('Failed to delete lure. Please try again.');
-                }
-            }
+                },
+                'Delete Lure'
+            );
         }
 
         // Initialize the dashboard after authentication
