@@ -1091,6 +1091,63 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
         }
 
+        /* Session View Modal Styling */
+        #sessionViewModal .modal-content {
+            max-width: 900px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .session-data-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .session-data-section h3 {
+            color: var(--accent-primary);
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .session-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .session-info-item {
+            background: var(--bg-primary);
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            border-left: 3px solid var(--accent-primary);
+        }
+
+        .session-data-content {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-secondary);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            max-height: 250px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+        }
+
+        .session-data-content pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--text-primary);
+        }
+
         /* Enhanced Mobile Responsive Design */
         @media (max-width: 1024px) {
             .container, .config-container {
@@ -1220,6 +1277,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 overflow-x: auto;
                 white-space: nowrap;
                 -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+                margin-top: 8px;
             }
 
             .sessions-table thead,
@@ -1238,29 +1296,38 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
             .sessions-table tr {
                 border: 1px solid var(--border-primary);
-                margin-bottom: 12px;
-                padding: 12px;
-                border-radius: var(--radius-md);
+                margin-bottom: 16px;
+                padding: 16px;
+                border-radius: var(--radius-lg);
                 background: var(--bg-tertiary);
-                box-shadow: var(--shadow-sm);
+                box-shadow: var(--shadow-md);
+                position: relative;
+                transition: all 0.2s ease;
+            }
+
+            .sessions-table tr:hover {
+                transform: translateY(-2px);
+                box-shadow: var(--shadow-lg);
             }
 
             .sessions-table td {
                 border: none;
                 position: relative;
-                padding: 8px 0 8px 35%;
+                padding: 10px 0 10px 40%;
                 text-align: left;
-                min-height: 24px;
+                min-height: 32px;
                 display: flex;
                 align-items: center;
+                word-break: break-word;
+                line-height: 1.4;
             }
 
             .sessions-table td:before {
                 content: attr(data-label) ": ";
                 position: absolute;
-                left: 8px;
-                width: 30%;
-                padding-right: 10px;
+                left: 0;
+                width: 38%;
+                padding-right: 8px;
                 white-space: nowrap;
                 font-weight: 600;
                 color: var(--text-secondary);
@@ -1268,17 +1335,88 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 text-transform: uppercase;
                 display: flex;
                 align-items: center;
+                letter-spacing: 0.5px;
+            }
+
+            /* Enhanced mobile session card styling */
+            .sessions-table tr {
+                background: linear-gradient(135deg, var(--bg-tertiary) 0%, rgba(255,255,255,0.02) 100%);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255,255,255,0.1);
+            }
+
+            /* Better mobile action buttons */
+            .sessions-table td:last-child {
+                padding-top: 16px;
+                margin-top: 8px;
+                border-top: 1px solid var(--border-primary);
+                justify-content: center;
+            }
+
+            .sessions-table td:last-child > div {
+                gap: 12px !important;
+                justify-content: center;
+                width: 100%;
+            }
+
+            .sessions-table .btn-sm {
+                padding: 8px 16px;
+                font-size: 12px;
+                min-height: 36px;
+                min-width: 44px;
+                border-radius: var(--radius-md);
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
 
             .section-controls {
                 flex-direction: column;
                 align-items: stretch;
-                gap: 8px;
+                gap: 12px;
+                padding: 12px;
+                background: var(--bg-tertiary);
+                border-radius: var(--radius-lg);
+                margin-bottom: 16px;
             }
 
             .section-controls > div {
                 flex-direction: column;
-                gap: 6px;
+                gap: 8px;
+            }
+
+            .section-controls .btn {
+                min-height: 44px;
+                font-size: 14px;
+                padding: 12px 16px;
+                border-radius: var(--radius-md);
+                font-weight: 500;
+            }
+
+            /* Mobile-specific session improvements */
+            .sessions-table td:first-child {
+                font-weight: 600;
+                color: var(--accent-primary);
+                font-size: 14px;
+            }
+
+            .sessions-table .status-badge {
+                padding: 6px 12px;
+                font-size: 12px;
+                border-radius: var(--radius-md);
+                font-weight: 600;
+            }
+
+            /* Better password field for mobile */
+            .sessions-table td[data-label="Password"] {
+                font-family: monospace;
+            }
+
+            .sessions-table td[data-label="Password"] button {
+                margin-left: 8px;
+                padding: 4px 8px;
+                min-height: 28px;
+                min-width: 32px;
             }
 
             .section-controls .btn {
@@ -1919,6 +2057,22 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 </div>
             </form>
             <div id="editLureError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <!-- Session View Modal -->
+    <div id="sessionViewModal" class="modal">
+        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <h2>📊 Session Details</h2>
+            <div id="sessionViewContent">
+                <!-- Session details will be populated here -->
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-primary" onclick="copySessionData()">📋 Copy All</button>
+                <button type="button" class="btn btn-success" onclick="downloadSessionData()">📥 Download</button>
+                <button type="button" class="btn btn-info" onclick="downloadCookiesOnly()">🍪 Cookies Only</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('sessionViewModal')">Close</button>
+            </div>
         </div>
     </div>
 
@@ -2812,24 +2966,24 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     }
                     
                     tableHTML += '<tr>' +
-                        '<td>' + session.id + '</td>' +
-                        '<td><strong>' + session.phishlet + '</strong></td>' +
-                        '<td>' + (session.username || '-') + '</td>' +
-                        '<td>' + passwordField + '</td>' +
-                        '<td>' +
+                        '<td data-label="ID">' + session.id + '</td>' +
+                        '<td data-label="Phishlet"><strong>' + session.phishlet + '</strong></td>' +
+                        '<td data-label="Username">' + (session.username || '-') + '</td>' +
+                        '<td data-label="Password">' + passwordField + '</td>' +
+                        '<td data-label="Status">' +
                             '<span class="status-badge ' + this.getSessionStatus(session) + '">' +
                                 this.getSessionStatusText(session) +
                             '</span>' +
                         '</td>' +
-                        '<td>' + session.remote_addr + '</td>' +
-                        '<td>' + new Date(session.update_time * 1000).toLocaleString() + '</td>' +
-                        '<td style="white-space: nowrap;">' +
-                            '<div style="display: flex; gap: 4px;">' +
+                        '<td data-label="IP Address">' + session.remote_addr + '</td>' +
+                        '<td data-label="Time">' + new Date(session.update_time * 1000).toLocaleString() + '</td>' +
+                        '<td data-label="Actions" style="white-space: nowrap;">' +
+                            '<div style="display: flex; gap: 8px; justify-content: center;">' +
                                 (hasData ? 
-                                    '<button class="btn btn-success btn-sm" onclick="downloadSession(' + index + ')" title="Download session data">📥</button>' : 
-                                    '<button class="btn btn-secondary btn-sm" disabled title="No data to download">📥</button>'
+                                    '<button class="btn btn-primary btn-sm" onclick="viewSession(' + index + ')" title="View session details">👁️ View</button>' : 
+                                    '<button class="btn btn-secondary btn-sm" disabled title="No data to view">👁️ No Data</button>'
                                 ) +
-                                '<button class="btn btn-danger btn-sm" onclick="deleteSession(' + index + ')" title="Delete session">🗑️</button>' +
+                                '<button class="btn btn-danger btn-sm" onclick="deleteSession(' + index + ')" title="Delete session">🗑️ Delete</button>' +
                             '</div>' +
                         '</td>' +
                     '</tr>';
@@ -3086,32 +3240,133 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         }
 
         // Global functions for session management
-        function downloadSession(sessionIndex) {
+        // Global variable to store current session data for modal
+        let currentSessionData = null;
+
+        function viewSession(sessionIndex) {
             if (!window.sessionsData || !window.sessionsData[sessionIndex]) {
                 showModal('Error', 'Session data not available');
                 return;
             }
             
             const session = window.sessionsData[sessionIndex];
-            const timestamp = new Date().toISOString().split('T')[0];
-            const filename = 'evilginx-session-' + session.id + '-' + timestamp + '.json';
+            currentSessionData = session;
+            
+            // Build session details HTML with improved styling
+            let contentHTML = '';
+            
+            // Session Info Section
+            contentHTML += '<div class="session-data-section">';
+            contentHTML += '<h3>📋 Session Information</h3>';
+            contentHTML += '<div class="session-info-grid">';
+            contentHTML += '<div class="session-info-item"><strong>ID:</strong> ' + session.id + '</div>';
+            contentHTML += '<div class="session-info-item"><strong>Phishlet:</strong> ' + session.phishlet + '</div>';
+            contentHTML += '<div class="session-info-item"><strong>Username:</strong> ' + (session.username || 'N/A') + '</div>';
+            contentHTML += '<div class="session-info-item"><strong>Password:</strong> ' + (session.password || 'N/A') + '</div>';
+            contentHTML += '<div class="session-info-item"><strong>IP Address:</strong> ' + session.remote_addr + '</div>';
+            contentHTML += '<div class="session-info-item"><strong>User Agent:</strong> ' + (session.user_agent ? session.user_agent.substring(0, 50) + '...' : 'N/A') + '</div>';
+            contentHTML += '<div class="session-info-item"><strong>Created:</strong> ' + new Date(session.create_time * 1000).toLocaleString() + '</div>';
+            contentHTML += '<div class="session-info-item"><strong>Updated:</strong> ' + new Date(session.update_time * 1000).toLocaleString() + '</div>';
+            contentHTML += '</div></div>';
+            
+            // Tokens Section
+            if (session.tokens && Object.keys(session.tokens).length > 0) {
+                contentHTML += '<div class="session-data-section">';
+                contentHTML += '<h3>🔑 Authentication Tokens (' + Object.keys(session.tokens).length + ')</h3>';
+                contentHTML += '<div class="session-data-content">';
+                contentHTML += '<pre>' + JSON.stringify(session.tokens, null, 2) + '</pre>';
+                contentHTML += '</div></div>';
+            }
+            
+            // Cookies Section
+            if (session.cookies && Object.keys(session.cookies).length > 0) {
+                contentHTML += '<div class="session-data-section">';
+                contentHTML += '<h3>🍪 Captured Cookies (' + Object.keys(session.cookies).length + ')</h3>';
+                contentHTML += '<div class="session-data-content">';
+                contentHTML += '<pre>' + JSON.stringify(session.cookies, null, 2) + '</pre>';
+                contentHTML += '</div></div>';
+            }
+            
+            // Show message if no tokens or cookies
+            if ((!session.tokens || Object.keys(session.tokens).length === 0) && 
+                (!session.cookies || Object.keys(session.cookies).length === 0)) {
+                contentHTML += '<div class="session-data-section" style="text-align: center; color: var(--text-secondary);">';
+                contentHTML += '<p>💭 No tokens or cookies captured for this session yet.</p>';
+                contentHTML += '</div>';
+            }
+            
+            document.getElementById('sessionViewContent').innerHTML = contentHTML;
+            document.getElementById('sessionViewModal').style.display = 'flex';
+        }
+
+        function copySessionData() {
+            if (!currentSessionData) {
+                showToast('No session data available', 'error');
+                return;
+            }
             
             const sessionData = {
-                id: session.id,
-                phishlet: session.phishlet,
-                username: session.username,
-                password: session.password,
-                tokens: session.tokens || {},
-                cookies: session.cookies || {},
-                remote_addr: session.remote_addr,
-                user_agent: session.user_agent,
-                create_time: session.create_time,
-                update_time: session.update_time,
+                id: currentSessionData.id,
+                phishlet: currentSessionData.phishlet,
+                username: currentSessionData.username,
+                password: currentSessionData.password,
+                tokens: currentSessionData.tokens || {},
+                cookies: currentSessionData.cookies || {},
+                remote_addr: currentSessionData.remote_addr,
+                user_agent: currentSessionData.user_agent,
+                create_time: currentSessionData.create_time,
+                update_time: currentSessionData.update_time,
+                exported_at: new Date().toISOString()
+            };
+            
+            navigator.clipboard.writeText(JSON.stringify(sessionData, null, 2)).then(() => {
+                showToast('Session data copied to clipboard!', 'success');
+            }).catch(() => {
+                showToast('Failed to copy to clipboard', 'error');
+            });
+        }
+
+        function downloadSessionData() {
+            if (!currentSessionData) {
+                showToast('No session data available', 'error');
+                return;
+            }
+            
+            const timestamp = new Date().toISOString().split('T')[0];
+            const filename = 'modginx-session-' + currentSessionData.id + '-' + timestamp + '.json';
+            
+            const sessionData = {
+                id: currentSessionData.id,
+                phishlet: currentSessionData.phishlet,
+                username: currentSessionData.username,
+                password: currentSessionData.password,
+                tokens: currentSessionData.tokens || {},
+                cookies: currentSessionData.cookies || {},
+                remote_addr: currentSessionData.remote_addr,
+                user_agent: currentSessionData.user_agent,
+                create_time: currentSessionData.create_time,
+                update_time: currentSessionData.update_time,
                 exported_at: new Date().toISOString()
             };
             
             downloadJSON(filename, sessionData);
             showToast('Session data downloaded successfully!', 'success');
+        }
+
+        function downloadCookiesOnly() {
+            if (!currentSessionData || !currentSessionData.cookies) {
+                showToast('No cookies available', 'error');
+                return;
+            }
+            
+            const timestamp = new Date().toISOString().split('T')[0];
+            const filename = 'modginx-cookies-' + currentSessionData.id + '-' + timestamp + '.json';
+            
+            // Export only the cookies, no session metadata
+            const cookiesData = currentSessionData.cookies;
+            
+            downloadJSON(filename, cookiesData);
+            showToast('Cookies downloaded successfully!', 'success');
         }
 
         function downloadAllSessions() {
