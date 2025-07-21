@@ -56,7 +56,7 @@ func printLogo(s string) {
 
 func printUpdateName() {
 	nameClr := color.New(color.FgHiWhite)
-	txt := nameClr.Sprintf("               - --  Community Edition  -- -")
+	txt := nameClr.Sprintf("               - --  MODGINX Edition  -- -")
 	fmt.Fprintf(color.Output, "%s", txt)
 }
 
@@ -82,22 +82,22 @@ func Banner() {
 
 	putAsciiArt("__                                     __\n")
 	putAsciiArt("_   @@     @@@@@@@@@@@@@@@@@@@     @@   _")
-	printLogo(`    ___________      __ __           __               `)
+	printLogo(`    _____  ___            __       __           __               `)
 	fmt.Println()
 	putAsciiArt("  @@@@    @@@@@@@@@@@@@@@@@@@@@    @@@@  ")
-	printLogo(`    \_   _____/__  _|__|  |    ____ |__| ____ ___  ___`)
+	printLogo(`    \   \/  /___   __| |   ____ |__| ____ ___  ___`)
 	fmt.Println()
 	putAsciiArt("  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  ")
-	printLogo(`     |    __)_\  \/ /  |  |   / __ \|  |/    \\  \/  /`)
+	printLogo(`     \     /  / _ \ / _  |  / __ \|  |/    \\  \/  /`)
 	fmt.Println()
 	putAsciiArt("    @@@@@@@@@@###@@@@@@@###@@@@@@@@@@    ")
-	printLogo(`     |        \\   /|  |  |__/ /_/  >  |   |  \>    < `)
+	printLogo(`     /     \  ( <_> ) (_| | / /_/  >  |   |  \>    < `)
 	fmt.Println()
 	putAsciiArt("      @@@@@@@#####@@@@@#####@@@@@@@      ")
-	printLogo(`    /_______  / \_/ |__|____/\___  /|__|___|  /__/\_ \`)
+	printLogo(`    /___/\  \ \___/ \__,_| \___  /|__|___|  /__/\_ \`)
 	fmt.Println()
 	putAsciiArt("       @@@@@@@###@@@@@@@###@@@@@@@       ")
-	printLogo(`            \/              /_____/         \/      \/`)
+	printLogo(`          \/                /_____/         \/      \/`)
 	fmt.Println()
 	putAsciiArt("      @@@@@@@@@@@@@@@@@@@@@@@@@@@@@      \n")
 	putAsciiArt("     @@@@@WW@@@WW@@WWW@@WW@@@WW@@@@@     ")

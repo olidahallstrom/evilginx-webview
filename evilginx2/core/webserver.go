@@ -227,7 +227,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Evilginx Dashboard</title>
+    <title>MODGINX Dashboard</title>
     <style>
         /* Modern Color Variables - Cursor Inspired */
         :root {
@@ -1993,7 +1993,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
     <div class="container" id="dashboardPage">
         <div class="header">
-            <h1>🎣 Evilginx Dashboard</h1>
+            <h1>🎣 MODGINX Dashboard</h1>
             <p>Real-time monitoring and session management</p>
         </div>
 
