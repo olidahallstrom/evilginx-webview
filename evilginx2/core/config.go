@@ -793,8 +793,7 @@ func (c *Config) GetLureByPath(site string, host string, path string) (*Lure, er
 			pl, err := c.GetPhishlet(site)
 			if err == nil {
 				if host == l.Hostname || host == pl.GetLandingPhishHost() {
-					// Match empty paths or exact path matches
-					if l.Path == "" || l.Path == path {
+					if l.Path == path {
 						return l, nil
 					}
 				}

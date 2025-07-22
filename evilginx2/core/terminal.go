@@ -788,7 +788,7 @@ func (t *Terminal) handleLures(args []string) error {
 					return err
 				}
 				l := &Lure{
-					Path:     "",  // Empty path instead of random string
+					Path:     "/" + GenRandomString(8),
 					Phishlet: args[1],
 				}
 				t.cfg.AddLure(args[1], l)
