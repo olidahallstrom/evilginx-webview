@@ -4911,9 +4911,9 @@ func (ws *WebServer) handleAPICreateLure(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Generate a random path if not provided
-	if lure.Path == "" {
-		lure.Path = "/" + GenRandomString(8)
+	// Don't generate random path if not provided
+	if lure.Path != "" && lure.Path[0] != '/' {
+		lure.Path = "/" + lure.Path
 	}
 
 	ws.cfg.AddLure(lure.Phishlet, &lure)
@@ -5017,19 +5017,26 @@ func (ws *WebServer) handleAPILureGetURL(w http.ResponseWriter, r *http.Request)
 
 	var phishURL string
 	if lure.Hostname != "" {
-		phishURL = "https://" + lure.Hostname + lure.Path
+		phishURL = "https://" + lure.Hostname
+		if lure.Path != "" {
+			phishURL += lure.Path
+		}
 	} else {
 		bhost, ok := ws.cfg.GetSiteDomain(pl.Name)
 		if !ok || len(bhost) == 0 {
 			http.Error(w, "No hostname set for phishlet", http.StatusBadRequest)
 			return
 		}
-		purl, err := pl.GetLureUrl(lure.Path)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if lure.Path == "" {
+			phishURL = "https://" + bhost
+		} else {
+			purl, err := pl.GetLureUrl(lure.Path)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			phishURL = purl
 		}
-		phishURL = purl
 	}
 
 	response := map[string]interface{}{
