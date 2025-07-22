@@ -231,29 +231,33 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     <style>
         /* Modern Color Variables - Cursor Inspired */
         :root {
-            --bg-primary: #0d1117;
-            --bg-secondary: #161b22;
-            --bg-tertiary: #21262d;
-            --bg-hover: #30363d;
-            --border-primary: #30363d;
-            --border-secondary: #21262d;
-            --text-primary: #f0f6fc;
-            --text-secondary: #8b949e;
-            --text-muted: #656d76;
-            --accent-primary: #2f81f7;
-            --accent-secondary: #238636;
-            --accent-danger: #da3633;
-            --accent-warning: #d29922;
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
-            --blur-sm: blur(8px);
-            --blur-md: blur(16px);
-            --radius-sm: 6px;
+            --bg-primary: #1a1d23;
+            --bg-secondary: #252a32;
+            --bg-tertiary: #2d3540;
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0a6;
+            --accent-primary: #4285f4;
+            --accent-secondary: #34a853;
+            --border-primary: #3c4043;
+            --border-secondary: #5f6368;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+            --radius-sm: 4px;
             --radius-md: 8px;
             --radius-lg: 12px;
+            --blur-sm: blur(8px);
+            
+            /* Additional colors for compatibility */
+            --bg-hover: #3c4043;
+            --text-muted: #9aa0a6;
+            --accent-danger: #ea4335;
+            --accent-warning: #fbbc04;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --blur-md: blur(16px);
+            --success-color: #34a853;
+            --danger-color: #ea4335;
         }
 
         * {
@@ -389,6 +393,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             height: 100%;
             background-color: rgba(0, 0, 0, 0.8);
             backdrop-filter: var(--blur-sm);
+            justify-content: center;
         }
 
         .modal.active {
@@ -598,8 +603,19 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             gap: 4px;
         }
 
+        /* Dashboard Tab Navigation */
+        .nav-tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-lg);
+            padding: 8px;
+            gap: 4px;
+        }
+
         .nav-tab {
-            padding: 10px 20px;
+            padding: 12px 24px;
             background: transparent;
             border: none;
             color: var(--text-secondary);
@@ -607,17 +623,31 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             border-radius: var(--radius-md);
             font-size: 14px;
             font-weight: 500;
-            transition: all 0.15s ease;
+            transition: all 0.2s ease;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .nav-tab:hover {
-            background: var(--bg-secondary);
+            background: rgba(255, 255, 255, 0.1);
             color: var(--text-primary);
         }
 
         .nav-tab.active {
             background: var(--accent-primary);
             color: white;
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         /* Container adjustments for navigation */
@@ -671,12 +701,28 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             font-weight: 400;
         }
 
+        /* Section Controls */
+        .section-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .section-controls > div:first-child {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
         /* Stats Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
         }
 
         .stat-card {
@@ -696,16 +742,14 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             top: 0;
             left: 0;
             right: 0;
-            height: 2px;
-            background: var(--accent-primary);
-            transform: scaleX(0);
-            transition: transform 0.3s ease;
-            transform-origin: left;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
         }
 
         .stat-card:hover {
             transform: translateY(-2px);
-            border-color: var(--border-secondary);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--accent-primary);
             box-shadow: var(--shadow-md);
         }
 
@@ -723,10 +767,115 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
         .stat-label {
             color: var(--text-secondary);
-            font-size: 13px;
+            font-size: 14px;
+            font-weight: 500;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+
+        /* Configure Tab Styling */
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .config-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            transition: all 0.2s ease;
+        }
+
+        .config-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--accent-primary);
+        }
+
+        .config-header h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .config-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .config-content {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .config-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-primary);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+        }
+
+        .status-indicator.active {
+            background: var(--success-color);
+        }
+
+        .status-indicator.inactive {
+            background: var(--danger-color);
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .system-info {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-primary);
+        }
+
+        .info-item:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
             font-weight: 500;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .info-value {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 14px;
         }
 
         /* Sections */
@@ -863,7 +1012,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         }
 
         .loading {
-            display: inline-block;
+
+            display: inline;
             color: var(--text-secondary);
         }
 
@@ -1096,6 +1246,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             max-width: 900px;
             max-height: 90vh;
             overflow-y: auto;
+            text-align: left;
         }
 
         .session-data-section {
@@ -1123,10 +1274,9 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         }
 
         .session-info-item {
-            background: var(--bg-primary);
-            padding: 8px 12px;
+            background: #2d3540;
+            padding: 10px 12px;
             border-radius: var(--radius-sm);
-            border-left: 3px solid var(--accent-primary);
         }
 
         .session-data-content {
@@ -1137,6 +1287,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             max-height: 250px;
             overflow-y: auto;
             font-family: 'Courier New', monospace;
+            text-align: left;
         }
 
         .session-data-content pre {
@@ -2216,51 +2367,156 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     <div class="container" id="dashboardPage">
         <div class="header">
             <h1>🎣 MODGINX Dashboard</h1>
-            <p>Real-time monitoring and session management</p>
+            <p>Advanced Phishing Framework - Real-time monitoring and session management</p>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-number" id="total-sessions">0</div>
-                <div class="stat-label">Total Sessions</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="active-sessions">0</div>
-                <div class="stat-label">Active Sessions</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="captured-sessions">0</div>
-                <div class="stat-label">Captured Sessions</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="uptime">0h 0m</div>
-                <div class="stat-label">Uptime</div>
+        <div class="nav-tabs">
+            <button class="nav-tab" onclick="showDashboardTab('dashboard')">📊 Dashboard</button>
+            <button class="nav-tab active" onclick="showDashboardTab('sessions')">👥 Sessions</button>
+            <button class="nav-tab" onclick="showDashboardTab('phishlets')">🎯 Phishlets</button>
+            <button class="nav-tab" onclick="showDashboardTab('lures')">🎣 Lures</button>
+            <button class="nav-tab" onclick="showDashboardTab('configure')">⚙️ Configure</button>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard-tab" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-sessions">0</div>
+                    <div class="stat-label">Total Sessions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="active-sessions">0</div>
+                    <div class="stat-label">Active Sessions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="captured-sessions">0</div>
+                    <div class="stat-label">Captured Sessions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="uptime">0h 0m</div>
+                    <div class="stat-label">Uptime</div>
+                </div>
             </div>
         </div>
 
-        <div class="sessions-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 class="section-title">📊 Recent Sessions</h2>
-                <button class="btn btn-secondary btn-sm" onclick="refreshSessions()" title="Refresh sessions">🔄 Refresh</button>
+        <!-- Sessions Tab -->
+        <div id="sessions-tab" class="tab-content active">
+            <div class="section-controls">
+                <div>
+                    <h2 class="section-title">📋 Captured Sessions</h2>
+                    <span style="color: var(--text-secondary); font-size: 13px; align-self: center;" id="sessions-count">0 total session(s)</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary" onclick="refreshSessions()" title="Refresh sessions">🔄 Refresh</button>
+                    <button class="btn btn-success" onclick="downloadAllSessions()" title="Download all sessions">📥 Download All</button>
+                    <button class="btn btn-danger" onclick="deleteAllSessions()" title="Delete all sessions">🗑️ Delete All</button>
+                </div>
             </div>
             <div id="sessions-content" class="loading">Loading sessions...</div>
         </div>
 
-        <div class="sessions-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 class="section-title">🎯 Phishlets</h2>
+        <!-- Phishlets Tab -->
+        <div id="phishlets-tab" class="tab-content">
+            <div class="section-controls">
+                <h2 class="section-title">🎯 Available Phishlets</h2>
+                <button class="btn btn-primary" onclick="showToast('Phishlet management coming soon!', 'info')">+ Add Phishlet</button>
             </div>
             <div id="phishlets-content" class="loading">Loading phishlets...</div>
         </div>
 
-        <div class="sessions-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 class="section-title">🎣 Lures</h2>
-                <div style="display: flex; gap: 8px;">
-                    <button class="btn btn-primary" onclick="showCreateLureModal()">➕ Create New Lure</button>
-                </div>
+        <!-- Lures Tab -->
+        <div id="lures-tab" class="tab-content">
+            <div class="section-controls">
+                <h2 class="section-title">🎣 Active Lures</h2>
+                <button class="btn btn-primary" onclick="showCreateLureModal()">➕ Create New Lure</button>
             </div>
             <div id="lures-content" class="loading">Loading lures...</div>
+        </div>
+
+        <!-- Configure Tab -->
+        <div id="configure-tab" class="tab-content">
+            <div class="section-controls">
+                <h2 class="section-title">⚙️ Configuration</h2>
+            </div>
+            <div class="config-grid">
+                <!-- Telegram Configuration -->
+                <div class="config-card">
+                    <div class="config-header">
+                        <h3>📱 Telegram Configuration</h3>
+                        <p>Configure Telegram notifications for captured sessions</p>
+                    </div>
+                    <div class="config-content">
+                        <div class="config-status" id="telegram-status">
+                            <span class="status-indicator"></span>
+                            <span class="status-text">Checking status...</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="showTelegramConfigModal()">Configure Telegram</button>
+                    </div>
+                </div>
+
+                <!-- Turnstile Configuration -->
+                <div class="config-card">
+                    <div class="config-header">
+                        <h3>🛡️ Turnstile Configuration</h3>
+                        <p>Configure Cloudflare Turnstile for bot protection</p>
+                    </div>
+                    <div class="config-content">
+                        <div class="config-status" id="turnstile-status">
+                            <span class="status-indicator"></span>
+                            <span class="status-text">Checking status...</span>
+                        </div>
+                        <button class="btn btn-primary" onclick="showTurnstileConfigModal()">Configure Turnstile</button>
+                    </div>
+                </div>
+
+                <!-- Redirector Management -->
+                <div class="config-card">
+                    <div class="config-header">
+                        <h3>📄 Redirector Management</h3>
+                        <p>Manage HTML redirector files for custom landing pages</p>
+                    </div>
+                    <div class="config-content">
+                        <div class="config-status" id="redirector-status">
+                            <span class="status-indicator"></span>
+                            <span class="status-text" id="redirector-count">Loading redirectors...</span>
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn btn-primary" onclick="showRedirectorUploadModal()">📄 Upload HTML</button>
+                            <button class="btn btn-secondary" onclick="showRedirectorsModal()">📋 Manage</button>
+                            <button class="btn btn-secondary" onclick="toggleRedirectorHelp()">❓ Help</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Information -->
+                <div class="config-card">
+                    <div class="config-header">
+                        <h3>📊 System Information</h3>
+                        <p>Current system status and information</p>
+                    </div>
+                    <div class="config-content">
+                        <div class="system-info" id="system-info">
+                            <div class="info-item">
+                                <span class="info-label">Version:</span>
+                                <span class="info-value">MODGINX Enhanced Edition</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Uptime:</span>
+                                <span class="info-value" id="system-uptime">Loading...</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Active Sessions:</span>
+                                <span class="info-value" id="system-sessions">Loading...</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Redirectors:</span>
+                                <span class="info-value" id="system-redirectors">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
 
@@ -2275,6 +2531,65 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     </div>
 
     <script>
+        // Dashboard Tab Navigation
+        function showDashboardTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(tab => tab.classList.remove('active'));
+            
+            // Remove active class from all nav tabs
+            const navTabs = document.querySelectorAll('.nav-tab');
+            navTabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab content
+            const selectedTab = document.getElementById(tabName + '-tab');
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+            
+            // Add active class to clicked nav tab
+            const clickedNavTab = event ? event.target : document.querySelector('[onclick="showDashboardTab(\'' + tabName + '\')"']');
+            if (clickedNavTab) {
+                clickedNavTab.classList.add('active');
+            }
+            
+            // Load content based on tab
+            switch(tabName) {
+                case 'sessions':
+                    refreshSessions();
+                    break;
+                case 'phishlets':
+                    refreshPhishlets();
+                    break;
+                case 'lures':
+                    refreshLures();
+                    break;
+                case 'configure':
+                    refreshConfiguration();
+                    break;
+                case 'dashboard':
+                default:
+                    refreshStats();
+                    break;
+            }
+        }
+
+        // Password Toggle Functionality
+        function togglePassword(button) {
+            const passwordSpan = button.previousElementSibling;
+            const isHidden = passwordSpan.textContent === '••••••••';
+            
+            if (isHidden) {
+                passwordSpan.textContent = passwordSpan.dataset.password;
+                button.textContent = '🙈';
+                button.title = 'Hide password';
+            } else {
+                passwordSpan.textContent = '••••••••';
+                button.textContent = '👁️';
+                button.title = 'Show password';
+            }
+        }
+
         // Utility Functions for Modern UI
         function showToast(message, type = 'info') {
             // Remove existing toasts
@@ -2958,10 +3273,9 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     // Password field with toggle
                     let passwordField = '-';
                     if (session.password) {
-                        const passwordId = 'pwd-' + session.id;
                         passwordField = '<div style="display: flex; align-items: center; gap: 6px;">' +
-                            '<span id="' + passwordId + '" style="font-family: monospace;">••••••••</span>' +
-                            '<button class="btn btn-sm" style="padding: 2px 6px; font-size: 11px;" onclick="togglePassword(\'' + passwordId + '\', \'' + session.password + '\')" title="Toggle password visibility">👁</button>' +
+                            '<span data-password="' + session.password + '" style="font-family: monospace;">••••••••</span>' +
+                            '<button class="btn btn-sm" style="padding: 2px 6px; font-size: 11px;" onclick="togglePassword(this)" title="Show password">👁️</button>' +
                         '</div>';
                     }
                     
