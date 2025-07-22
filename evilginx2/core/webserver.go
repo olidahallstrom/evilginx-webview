@@ -1291,7 +1291,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
         .session-data-section {
             background: var(--bg-secondary);
-            border: 1px solid var(--border-primary);
             border-radius: var(--radius-md);
             padding: 16px;
             margin-bottom: 16px;
@@ -1324,7 +1323,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             border: 1px solid var(--border-secondary);
             border-radius: var(--radius-sm);
             padding: 12px;
-            max-height: 250px;
+            max-height: 650px;
             overflow-y: auto;
             font-family: 'Courier New', monospace;
             text-align: left;
@@ -1469,6 +1468,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 white-space: nowrap;
                 -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
                 margin-top: 8px;
+                border-radius: 10px;
+                overflow: hidden;
             }
 
             .sessions-table thead,
@@ -1915,6 +1916,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             .sessions-table {
                 -webkit-overflow-scrolling: touch;
                 scroll-behavior: smooth;
+                border-radius: 10px;
+                overflow: hidden;
             }
         }
 
@@ -3425,13 +3428,12 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
                 let luresHTML = '';
                 
+                // Generate table rows with placeholder URLs first
                 lures.forEach((lure, index) => {
-                    const lureUrl = window.location.protocol + '//' + window.location.host + lure.path;
-                    
-                    luresHTML += '<tr>' +
+                    luresHTML += '<tr id="lure-row-' + index + '">' +
                         '<td>' + (index + 1) + '</td>' +
                         '<td><strong>' + lure.phishlet + '</strong></td>' +
-                        '<td><a href="' + lureUrl + '" target="_blank" style="color: var(--accent-primary);">' + lureUrl + '</a></td>' +
+                        '<td id="lure-url-' + index + '"><span style="color: var(--text-secondary);">Loading URL...</span></td>' +
                         '<td>' + (lure.hostname || 'Default') + '</td>' +
                         '<td>' + (lure.redirect_url || 'None') + '</td>' +
                         '<td>' +
@@ -3442,8 +3444,35 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                         '</td>' +
                     '</tr>';
                 });
-
+                
                 contentEl.innerHTML = luresHTML;
+                
+                // Fetch actual URLs for each lure asynchronously
+                lures.forEach(async (lure, index) => {
+                    try {
+                        const response = await fetch('/api/lures/' + index + '/url', {
+                            headers: { 'Authorization': authManager.token }
+                        });
+                        const data = await response.json();
+                        if (response.ok && data.url) {
+                            const urlCell = document.getElementById('lure-url-' + index);
+                            if (urlCell) {
+                                urlCell.innerHTML = '<a href="' + data.url + '" target="_blank" style="color: var(--accent-primary);">' + data.url + '</a>';
+                            }
+                        } else {
+                            const urlCell = document.getElementById('lure-url-' + index);
+                            if (urlCell) {
+                                urlCell.innerHTML = '<span style="color: var(--text-secondary);">URL not available</span>';
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error fetching lure URL for index ' + index + ':', error);
+                        const urlCell = document.getElementById('lure-url-' + index);
+                        if (urlCell) {
+                            urlCell.innerHTML = '<span style="color: var(--text-secondary);">Error loading URL</span>';
+                        }
+                    }
+                });
             }
 
             getSessionStatus(session) {

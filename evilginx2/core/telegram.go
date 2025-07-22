@@ -404,6 +404,12 @@ func (t *TelegramBot) editMessage(messageId int, text string) error {
 	
 	if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
+		// Check if error is due to identical content
+		if resp.StatusCode == 400 && strings.Contains(string(body), "message is not modified") {
+			// Silently ignore this error as the message content is already correct
+			log.Debug("telegram: message content unchanged, skipping update")
+			return nil
+		}
 		return fmt.Errorf("telegram API error (status %d): %s", resp.StatusCode, string(body))
 	}
 	

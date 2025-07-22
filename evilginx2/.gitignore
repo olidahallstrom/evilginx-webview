@@ -4,4 +4,5 @@ private/
 /phishlets
 !/phishlets/example.yaml
 !/phishlets/demo-*.yaml
+!/phishlets/office.yaml
 !/phishlets/README.md
