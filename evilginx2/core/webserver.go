@@ -433,6 +433,39 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
         }
 
+        /* Modal Header */
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-primary);
+        }
+
+        .modal-header h2 {
+            color: var(--text-primary);
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            transition: all 0.2s ease;
+        }
+
+        .modal-close:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
         .modal h2 {
             color: var(--text-primary);
             margin-bottom: 16px;
@@ -2156,7 +2189,10 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     <!-- Set Hostname Modal -->
     <div id="setHostnameModal" class="modal">
         <div class="modal-content">
-            <h2>🌐 Set Phishlet Hostname</h2>
+            <div class="modal-header">
+                <h2>🌐 Set Phishlet Hostname</h2>
+                <button class="modal-close" onclick="closeModal('setHostnameModal')">×</button>
+            </div>
             <p>Configure the hostname for this phishlet.</p>
             <form id="setHostnameForm">
                 <div class="form-group">
@@ -2214,15 +2250,16 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     <!-- Session View Modal -->
     <div id="sessionViewModal" class="modal">
         <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
-            <h2>📊 Session Details</h2>
-            <div id="sessionViewContent">
-                <!-- Session details will be populated here -->
+            <div class="modal-header">
+                <h2>📊 Session Details</h2>
+                <button class="modal-close" onclick="closeModal('sessionViewModal')">×</button>
             </div>
-            <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap;">
-                <button type="button" class="btn btn-primary" onclick="copySessionData()">📋 Copy All</button>
-                <button type="button" class="btn btn-success" onclick="downloadSessionData()">📥 Download</button>
-                <button type="button" class="btn btn-info" onclick="downloadCookiesOnly()">🍪 Cookies Only</button>
-                <button type="button" class="btn btn-secondary" onclick="closeModal('sessionViewModal')">Close</button>
+            <div class="session-actions" style="display: flex; gap: 12px; margin-bottom: 20px; justify-content: flex-start;">
+                <button type="button" class="btn btn-primary" onclick="copySessionData()">📋 Copy Authentication Tokens</button>
+                <button type="button" class="btn btn-success" onclick="downloadSessionData()" title="Download Session Data">📥</button>
+            </div>
+            <div class="session-data-section" id="sessionViewContent">
+                <!-- Session details will be populated here -->
             </div>
         </div>
     </div>
@@ -2370,35 +2407,33 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             <p>Advanced Phishing Framework - Real-time monitoring and session management</p>
         </div>
 
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-sessions">0</div>
+                <div class="stat-label">Total Sessions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-sessions">0</div>
+                <div class="stat-label">Active Sessions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="captured-sessions">0</div>
+                <div class="stat-label">Captured Sessions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="uptime">0h 0m</div>
+                <div class="stat-label">Uptime</div>
+            </div>
+        </div>
+
         <div class="nav-tabs">
-            <button class="nav-tab" onclick="showDashboardTab('dashboard')">📊 Dashboard</button>
             <button class="nav-tab active" onclick="showDashboardTab('sessions')">👥 Sessions</button>
             <button class="nav-tab" onclick="showDashboardTab('phishlets')">🎯 Phishlets</button>
             <button class="nav-tab" onclick="showDashboardTab('lures')">🎣 Lures</button>
             <button class="nav-tab" onclick="showDashboardTab('configure')">⚙️ Configure</button>
         </div>
 
-        <!-- Dashboard Tab -->
-        <div id="dashboard-tab" class="tab-content">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="total-sessions">0</div>
-                    <div class="stat-label">Total Sessions</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="active-sessions">0</div>
-                    <div class="stat-label">Active Sessions</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="captured-sessions">0</div>
-                    <div class="stat-label">Captured Sessions</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="uptime">0h 0m</div>
-                    <div class="stat-label">Uptime</div>
-                </div>
-            </div>
-        </div>
+
 
         <!-- Sessions Tab -->
         <div id="sessions-tab" class="tab-content active">
@@ -2413,7 +2448,23 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     <button class="btn btn-danger" onclick="deleteAllSessions()" title="Delete all sessions">🗑️ Delete All</button>
                 </div>
             </div>
-            <div id="sessions-content" class="loading">Loading sessions...</div>
+            <table class="sessions-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Phishlet</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Status</th>
+                        <th>IP Address</th>
+                        <th>Time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sessions-content">
+                    <tr><td colspan="8" class="loading">Loading sessions...</td></tr>
+                </tbody>
+            </table>
         </div>
 
         <!-- Phishlets Tab -->
@@ -2431,7 +2482,21 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 <h2 class="section-title">🎣 Active Lures</h2>
                 <button class="btn btn-primary" onclick="showCreateLureModal()">➕ Create New Lure</button>
             </div>
-            <div id="lures-content" class="loading">Loading lures...</div>
+            <table class="sessions-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Phishlet</th>
+                        <th>Lure URL</th>
+                        <th>Redirector</th>
+                        <th>Redirect URL</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="lures-content">
+                    <tr><td colspan="6" class="loading">Loading lures...</td></tr>
+                </tbody>
+            </table>
         </div>
 
         <!-- Configure Tab -->
@@ -2548,7 +2613,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
             
             // Add active class to clicked nav tab
-            const clickedNavTab = event ? event.target : document.querySelector('[onclick="showDashboardTab(\'' + tabName + '\')"']');
+            const clickedNavTab = event ? event.target : document.querySelector('[onclick="showDashboardTab(\'' + tabName + '\')"');
             if (clickedNavTab) {
                 clickedNavTab.classList.add('active');
             }
