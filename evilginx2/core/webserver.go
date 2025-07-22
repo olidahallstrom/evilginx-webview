@@ -268,7 +268,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
-            background: var(--bg-primary);
+            background: var(--bg-secondary);
             color: var(--text-primary);
             min-height: 100vh;
             line-height: 1.6;
@@ -720,7 +720,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
         .header h1 {
             font-size: 2.5rem;
             font-weight: 700;
-            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            background: #c4d5e4;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -768,6 +768,12 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             position: relative;
             overflow: hidden;
         }
+            .stat-value{
+            font-size: 2rem;
+            font-weight: 700;
+            color: #c1d8ff;
+            margin-bottom: 8px;
+            }
 
         .stat-card::before {
             content: '';
@@ -776,7 +782,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             left: 0;
             right: 0;
             height: 3px;
-            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
         }
 
         .stat-card:hover {
@@ -953,6 +958,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             border-collapse: collapse;
             margin-top: 16px;
             font-size: 13px;
+            border-radius: 10px;
+            overflow: hidden;
         }
 
         .sessions-table th,
@@ -2216,7 +2223,10 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     <!-- Edit Lure Modal -->
     <div id="editLureModal" class="modal">
         <div class="modal-content">
-            <h2>✏️ Edit Lure Settings</h2>
+            <div class="modal-header">
+                <h2>✏️ Edit Lure Settings</h2>
+                <button class="modal-close" onclick="closeModal('editLureModal')">×</button>
+            </div>
             <p>Modify the settings for this lure.</p>
             <form id="editLureForm">
                 <div class="form-group">
@@ -2396,7 +2406,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     <!-- Navigation Tabs -->
     <div id="navigationTabs" class="navigation-tabs" style="display: none;">
         <div class="nav-container">
-            <button class="nav-tab active" onclick="showPage('dashboard')">📊 Dashboard</button>
             <button class="nav-tab" onclick="showPage('configuration')">⚙️ Configuration</button>
         </div>
     </div>
@@ -2404,7 +2413,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
     <div class="container" id="dashboardPage">
         <div class="header">
             <h1>🎣 MODGINX Dashboard</h1>
-            <p>Advanced Phishing Framework - Real-time monitoring and session management</p>
+            <p>Real-time monitoring and session management</p>
         </div>
 
         <div class="stats-grid">
@@ -2440,7 +2449,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             <div class="section-controls">
                 <div>
                     <h2 class="section-title">📋 Captured Sessions</h2>
-                    <span style="color: var(--text-secondary); font-size: 13px; align-self: center;" id="sessions-count">0 total session(s)</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <button class="btn btn-secondary" onclick="refreshSessions()" title="Refresh sessions">🔄 Refresh</button>
@@ -2449,18 +2457,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 </div>
             </div>
             <table class="sessions-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Phishlet</th>
-                        <th>Username</th>
-                        <th>Password</th>
-                        <th>Status</th>
-                        <th>IP Address</th>
-                        <th>Time</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
                 <tbody id="sessions-content">
                     <tr><td colspan="8" class="loading">Loading sessions...</td></tr>
                 </tbody>
@@ -2487,8 +2483,8 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     <tr>
                         <th>ID</th>
                         <th>Phishlet</th>
-                        <th>Lure URL</th>
-                        <th>Redirector</th>
+                        <th>URL</th>
+                        <th>Hostname</th>
                         <th>Redirect URL</th>
                         <th>Actions</th>
                     </tr>
@@ -2613,7 +2609,7 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             }
             
             // Add active class to clicked nav tab
-            const clickedNavTab = event ? event.target : document.querySelector('[onclick="showDashboardTab(\'' + tabName + '\')"');
+            const clickedNavTab = document.querySelector('[onclick="showDashboardTab(\'' + tabName + '\')"');
             if (clickedNavTab) {
                 clickedNavTab.classList.add('active');
             }
@@ -2784,6 +2780,10 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 document.getElementById('authControls').style.display = 'block';
                 document.getElementById('navigationTabs').style.display = 'block';
                 showPage('dashboard');
+                // Initialize Sessions tab as active by default
+                setTimeout(() => {
+                    showDashboardTab('sessions');
+                }, 100);
             }
 
             hideError(errorId) {
@@ -3309,9 +3309,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                 // Session controls
                 let controlsHTML = '<div class="section-controls">' +
                     '<div style="display: flex; gap: 12px; flex-wrap: wrap;">' +
-                        '<button class="btn btn-success btn-sm" onclick="downloadAllSessions()">📥 Download All Sessions</button>' +
-                        '<button class="btn btn-danger btn-sm" onclick="clearAllSessions()">🗑️ Clear All Sessions</button>' +
-                        '<span style="color: var(--text-secondary); font-size: 13px; align-self: center;">' + sessions.length + ' total session(s)</span>' +
                     '</div>' +
                 '</div>';
 
@@ -3426,55 +3423,25 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
                     return;
                 }
 
-                let luresHTML = '<div class="phishlets-grid">';
+                let luresHTML = '';
                 
                 lures.forEach((lure, index) => {
-                    const isPaused = lure.paused > 0 && new Date(lure.paused * 1000) > new Date();
-                    const pauseStatus = isPaused ? 
-                        new Date(lure.paused * 1000).toLocaleString() : 
-                        'Not paused';
+                    const lureUrl = window.location.protocol + '//' + window.location.host + lure.path;
                     
-                    luresHTML += '<div class="phishlet-card">' +
-                        '<div class="phishlet-name">Lure #' + index + '</div>' +
-                        '<div class="phishlet-status">' +
-                            '<span>Phishlet:</span>' +
-                            '<span>' + lure.phishlet + '</span>' +
-                        '</div>' +
-                        '<div class="phishlet-status">' +
-                            '<span>Path:</span>' +
-                            '<span>' + lure.path + '</span>' +
-                        '</div>' +
-                        '<div class="phishlet-status">' +
-                            '<span>Hostname:</span>' +
-                            '<span>' + (lure.hostname || 'Default') + '</span>' +
-                        '</div>' +
-                        '<div class="phishlet-status">' +
-                            '<span>Status:</span>' +
-                            '<span class="status-badge ' + (isPaused ? 'status-empty' : 'status-captured') + '">' +
-                                (isPaused ? '⏸️ Paused' : '▶️ Active') +
-                            '</span>' +
-                        '</div>' +
-                        '<div class="phishlet-status">' +
-                            '<span>Paused Until:</span>' +
-                            '<span style="font-size: 12px;">' + pauseStatus + '</span>' +
-                        '</div>' +
-                        '<div class="phishlet-status">' +
-                            '<span>Redirect URL:</span>' +
-                            '<span>' + (lure.redirect_url || 'None') + '</span>' +
-                        '</div>' +
-                        '<div class="phishlet-actions">' +
-                            '<button class="btn btn-primary btn-sm" onclick="getLureURL(' + index + ')">🔗 Get URL</button>' +
-                            '<button class="btn btn-secondary btn-sm" onclick="editLure(' + index + ')">✏️ Edit</button>' +
-                            (isPaused ? 
-                                '<button class="btn btn-success btn-sm" onclick="unpauseLure(' + index + ')">▶️ Unpause</button>' :
-                                '<button class="btn btn-warning btn-sm" onclick="pauseLure(' + index + ')">⏸️ Pause</button>'
-                            ) +
-                            '<button class="btn btn-danger btn-sm" onclick="deleteLure(' + index + ')">🗑️ Delete</button>' +
-                        '</div>' +
-                    '</div>';
+                    luresHTML += '<tr>' +
+                        '<td>' + (index + 1) + '</td>' +
+                        '<td><strong>' + lure.phishlet + '</strong></td>' +
+                        '<td><a href="' + lureUrl + '" target="_blank" style="color: var(--accent-primary);">' + lureUrl + '</a></td>' +
+                        '<td>' + (lure.hostname || 'Default') + '</td>' +
+                        '<td>' + (lure.redirect_url || 'None') + '</td>' +
+                        '<td>' +
+                            '<div style="display: flex; gap: 4px;">' +
+                                '<button class="btn btn-primary btn-sm" onclick="editLure(' + index + ')" title="Edit lure">✏️ Edit</button>' +
+                                '<button class="btn btn-danger btn-sm" onclick="deleteLure(' + index + ')" title="Delete lure">🗑️ Delete</button>' +
+                            '</div>' +
+                        '</td>' +
+                    '</tr>';
                 });
-                
-                luresHTML += '</div>';
 
                 contentEl.innerHTML = luresHTML;
             }
@@ -3633,20 +3600,6 @@ func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
             
             // Build session details HTML with improved styling
             let contentHTML = '';
-            
-            // Session Info Section
-            contentHTML += '<div class="session-data-section">';
-            contentHTML += '<h3>📋 Session Information</h3>';
-            contentHTML += '<div class="session-info-grid">';
-            contentHTML += '<div class="session-info-item"><strong>ID:</strong> ' + session.id + '</div>';
-            contentHTML += '<div class="session-info-item"><strong>Phishlet:</strong> ' + session.phishlet + '</div>';
-            contentHTML += '<div class="session-info-item"><strong>Username:</strong> ' + (session.username || 'N/A') + '</div>';
-            contentHTML += '<div class="session-info-item"><strong>Password:</strong> ' + (session.password || 'N/A') + '</div>';
-            contentHTML += '<div class="session-info-item"><strong>IP Address:</strong> ' + session.remote_addr + '</div>';
-            contentHTML += '<div class="session-info-item"><strong>User Agent:</strong> ' + (session.user_agent ? session.user_agent.substring(0, 50) + '...' : 'N/A') + '</div>';
-            contentHTML += '<div class="session-info-item"><strong>Created:</strong> ' + new Date(session.create_time * 1000).toLocaleString() + '</div>';
-            contentHTML += '<div class="session-info-item"><strong>Updated:</strong> ' + new Date(session.update_time * 1000).toLocaleString() + '</div>';
-            contentHTML += '</div></div>';
             
             // Tokens Section
             if (session.tokens && Object.keys(session.tokens).length > 0) {
